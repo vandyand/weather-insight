@@ -1,0 +1,31 @@
+{
+  "name": "climate-insight",
+  "version": "0.1.0",
+  "description": "A geospatial visualization platform for climate data",
+  "main": "index.js",
+  "scripts": {
+    "dev": "shadow-cljs watch app",
+    "build": "shadow-cljs release app",
+    "server": "clojure -M:dev"
+  },
+  "keywords": [
+    "climate",
+    "geospatial",
+    "clojure",
+    "clojurescript",
+    "mapbox",
+    "visualization"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "mapbox-gl": "^2.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-map-gl": "^7.1.6",
+    "recharts": "^2.7.2"
+  },
+  "devDependencies": {
+    "shadow-cljs": "^2.25.0"
+  }
+}

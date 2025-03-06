@@ -1,0 +1,31 @@
+# Clojure
+.cpcache/
+.nrepl-port
+.clj-kondo/.cache
+.lsp/.cache
+
+# ClojureScript
+.shadow-cljs/
+resources/public/js
+node_modules/
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.calva/
+
+# Logs and artifacts
+log/
+target/
+*.log
+job-desc
+
+# Environment
+.env
+
+# Local configuration
+dev-config.edn

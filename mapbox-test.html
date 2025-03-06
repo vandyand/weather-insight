@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Mapbox Token Test</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .test-info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1;
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="test-info">
+      <h3>Mapbox Token Test</h3>
+      <div id="token-info"></div>
+      <div id="map-status"></div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+      // Use the token from your application
+      const token =
+        "pk.eyJ1IjoidmFuZHlhbmQiLCJhIjoiY203d2tncnRnMDZkYTJycTExNjNicTljeSJ9.Wo-5cN2qViLD-HWZ2v9HtQ";
+
+      document.getElementById(
+        "token-info"
+      ).innerHTML = `Token length: ${token.length}`;
+
+      try {
+        mapboxgl.accessToken = token;
+        const map = new mapboxgl.Map({
+          container: "map",
+          style: "mapbox://styles/mapbox/streets-v12",
+          center: [-122.4194, 37.7749], // San Francisco
+          zoom: 9,
+        });
+
+        map.on("load", () => {
+          document.getElementById("map-status").innerHTML =
+            "Map loaded successfully!";
+        });
+
+        map.on("error", (e) => {
+          document.getElementById("map-status").innerHTML = `Map error: ${
+            e.error.message || "Unknown error"
+          }`;
+          console.error("Mapbox error:", e);
+        });
+      } catch (error) {
+        document.getElementById(
+          "map-status"
+        ).innerHTML = `Error initializing map: ${error.message}`;
+        console.error("Error initializing Mapbox:", error);
+      }
+    </script>
+  </body>
+</html>
