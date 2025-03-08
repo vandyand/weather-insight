@@ -14,6 +14,7 @@ import { Container, Row, Col, Button, Form } from "react-bootstrap";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useNavigate, useLocation } from "react-router-dom";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 
 // Fix Leaflet icon issues
 delete L.Icon.Default.prototype._getIconUrl;
@@ -57,20 +58,53 @@ const MapContent = styled.div`
   flex: 1;
   display: flex;
   position: relative;
+  overflow: hidden; /* Prevent scrollbars when resizing */
 `;
 
+// Style for the resizable panel system
+const StyledPanelGroup = styled(PanelGroup)`
+  width: 100%;
+  height: 100%;
+`;
+
+// Style for the resize handle
+const StyledResizeHandle = styled(PanelResizeHandle)`
+  width: 8px;
+  background-color: #ddd;
+  position: relative;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #aaa;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    height: 30px;
+    width: 4px;
+    margin-top: -15px;
+    border-left: 1px solid #999;
+    border-right: 1px solid #999;
+  }
+`;
+
+// Side panel for displaying data
 const SidePanel = styled.div`
-  width: 30%;
   padding: 1rem;
   background-color: #f8f9fa;
   overflow-y: auto;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-  z-index: 1;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+  height: 100%;
 `;
 
+// Map container
 const MapSection = styled.div`
-  flex: 1;
-  z-index: 0;
+  height: 100%;
+  width: 100%;
 `;
 
 const StyledMapContainer = styled(MapContainer)`
@@ -153,6 +187,9 @@ const MapPage = () => {
   // Rendering counter for debugging
   const renderCount = useRef(0);
   renderCount.current += 1;
+
+  // State to save panel size preferences
+  const [mapPanelSize, setMapPanelSize] = useState(75); // Initial map takes 75% of space
 
   // Log Mapbox token info on mount
   useEffect(() => {
@@ -374,11 +411,13 @@ const MapPage = () => {
         name: formatDatasetName(datasetType),
         data: normalizedData,
         color: colorMap[datasetType],
-        // Store original values for tooltips
-        _original: timeSeriesData.map((point) => [
-          new Date(point.timestamp).getTime(),
-          point[datasetType] || null,
-        ]),
+        // Store original values for tooltips - ensure we store actual numbers for zero values
+        _original: timeSeriesData.map((point) => {
+          const timestamp = new Date(point.timestamp).getTime();
+          // Ensure zero is stored as 0, not null or undefined
+          const value = point[datasetType];
+          return [timestamp, typeof value === "number" ? value : null];
+        }),
       };
     });
 
@@ -423,15 +462,28 @@ const MapPage = () => {
         intersect: false,
         y: {
           formatter: function (value, { seriesIndex, dataPointIndex, w }) {
-            // Use original values for tooltip
+            // Get the original value from our stored data
             const originalValue =
               w.config.series[seriesIndex]._original[dataPointIndex][1];
-            if (originalValue === null) return "N/A";
+
+            // More robust check for missing data - only if it's strictly null or undefined
+            // Should handle zero values (0.00) correctly
+            if (originalValue === null || originalValue === undefined) {
+              return "N/A";
+            }
+
+            // For debugging - enable this to check the actual value type in browser console
+            // console.log(`Value for ${w.config.series[seriesIndex].name}:`, {
+            //   value: originalValue,
+            //   type: typeof originalValue,
+            //   isZero: originalValue === 0,
+            //   equalsZeroString: originalValue == "0"
+            // });
 
             const datasetType = datasetTypes[seriesIndex];
-            return `${originalValue.toFixed(2)} ${getUnitByDatasetId(
-              datasetType
-            )}`;
+            // Ensure we're formatting a number
+            const formattedValue = Number(originalValue).toFixed(2);
+            return `${formattedValue} ${getUnitByDatasetId(datasetType)}`;
           },
         },
         x: {
@@ -557,6 +609,11 @@ const MapPage = () => {
     }
   };
 
+  // Handle panel resize
+  const handlePanelResize = (sizes) => {
+    setMapPanelSize(sizes[0]);
+  };
+
   return (
     <MapPageContainer>
       {/* Debug information */}
@@ -601,65 +658,83 @@ const MapPage = () => {
       </MapHeader>
 
       <MapContent>
-        <MapSection>
-          <StyledMapContainer
-            center={[51.505, -0.09]}
-            zoom={13}
-            whenCreated={handleMapInit}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-            {position && (
-              <Marker position={[position.lat, position.lng]}>
-                <Popup>Weather data for this location</Popup>
-              </Marker>
-            )}
-            {/* Add our event handler component */}
-            <MapEventHandler onMapClick={handleMapClick} />
-          </StyledMapContainer>
-        </MapSection>
+        <StyledPanelGroup
+          direction="horizontal"
+          onLayout={handlePanelResize}
+          id="map-panel-group"
+        >
+          {/* Map Panel */}
+          <Panel id="map" defaultSize={mapPanelSize} minSize={50}>
+            <MapSection>
+              <StyledMapContainer
+                center={[51.505, -0.09]}
+                zoom={13}
+                whenCreated={handleMapInit}
+              >
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                />
+                {position && (
+                  <Marker position={[position.lat, position.lng]}>
+                    <Popup>Weather data for this location</Popup>
+                  </Marker>
+                )}
+                {/* Add our event handler component */}
+                <MapEventHandler onMapClick={handleMapClick} />
+              </StyledMapContainer>
+            </MapSection>
+          </Panel>
 
-        <SidePanel>
-          {isLoading ? (
-            <div className="text-center p-5">
-              <div className="spinner-border" role="status">
-                <span className="sr-only">Loading...</span>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="alert alert-danger">{error}</div>
-          ) : !weatherData ? (
-            <NoSelection>
-              <p>Click on the map to view weather data for that location.</p>
-            </NoSelection>
-          ) : (
-            <div>
-              <h5>Weather Data</h5>
-              <p>
-                Location: {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
-              </p>
-              {renderChart()}
-              {renderDataTable()}
-              {isDevMode && (
-                <div className="mt-4">
-                  <h6>Raw Data</h6>
-                  <pre
-                    className="bg-light p-2"
-                    style={{
-                      fontSize: "0.8rem",
-                      maxHeight: "200px",
-                      overflowY: "auto",
-                    }}
-                  >
-                    {JSON.stringify(weatherData, null, 2)}
-                  </pre>
+          {/* Resize Handle */}
+          <StyledResizeHandle />
+
+          {/* Data Panel */}
+          <Panel id="data" defaultSize={100 - mapPanelSize} minSize={25}>
+            <SidePanel>
+              {isLoading ? (
+                <div className="text-center p-5">
+                  <div className="spinner-border" role="status">
+                    <span className="sr-only">Loading...</span>
+                  </div>
+                </div>
+              ) : error ? (
+                <div className="alert alert-danger">{error}</div>
+              ) : !weatherData ? (
+                <NoSelection>
+                  <p>
+                    Click on the map to view weather data for that location.
+                  </p>
+                </NoSelection>
+              ) : (
+                <div>
+                  <h5>Weather Data</h5>
+                  <p>
+                    Location: {position.lat.toFixed(4)},{" "}
+                    {position.lng.toFixed(4)}
+                  </p>
+                  {renderChart()}
+                  {renderDataTable()}
+                  {isDevMode && (
+                    <div className="mt-4">
+                      <h6>Raw Data</h6>
+                      <pre
+                        className="bg-light p-2"
+                        style={{
+                          fontSize: "0.8rem",
+                          maxHeight: "200px",
+                          overflowY: "auto",
+                        }}
+                      >
+                        {JSON.stringify(weatherData, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </SidePanel>
+            </SidePanel>
+          </Panel>
+        </StyledPanelGroup>
       </MapContent>
 
       {!isDevMode && (
