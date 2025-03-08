@@ -62,26 +62,53 @@ const parseJsonBody = (req) => {
 // Function to make HTTP requests to external APIs
 const makeRequest = (url) => {
   return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        let data = "";
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    };
 
-        res.on("data", (chunk) => {
-          data += chunk;
-        });
+    const req = https.request(options, (res) => {
+      let data = "";
 
-        res.on("end", () => {
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      res.on("end", () => {
+        // Check the response status code
+        if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
+            // Only try to parse JSON if response is successful
             const jsonData = JSON.parse(data);
             resolve(jsonData);
           } catch (error) {
-            reject(error);
+            reject(
+              new Error(
+                `Failed to parse JSON response: ${data.substring(0, 100)}...`
+              )
+            );
           }
-        });
-      })
-      .on("error", (error) => {
-        reject(error);
+        } else {
+          // For error responses, include the status code and response body in the error
+          const errorMessage = `API responded with status ${
+            res.statusCode
+          }: ${data.substring(0, 100)}...`;
+          console.error(errorMessage);
+          reject(new Error(errorMessage));
+        }
       });
+    });
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+
+    req.end();
   });
 };
 
@@ -106,6 +133,16 @@ const getWeatherData = async (location, startDate, endDate) => {
       )}`
     );
 
+    // Check if API key is valid
+    if (
+      !VISUAL_CROSSING_API_KEY ||
+      VISUAL_CROSSING_API_KEY === "YOUR_API_KEY_HERE"
+    ) {
+      throw new Error(
+        "Invalid or missing Visual Crossing API key. Please check your .env file."
+      );
+    }
+
     const result = await makeRequest(url);
     console.log(
       `Received response from Visual Crossing with ${
@@ -115,7 +152,22 @@ const getWeatherData = async (location, startDate, endDate) => {
 
     return result;
   } catch (error) {
-    console.error("Error fetching weather data:", error);
+    console.error("Error fetching weather data:", error.message);
+
+    // Provide more helpful error messages for common API issues
+    if (error.message.includes("exceeded")) {
+      console.error(
+        "API quota has been exceeded. Consider upgrading your Visual Crossing plan or reducing the number of requests."
+      );
+    } else if (
+      error.message.includes("invalid key") ||
+      error.message.includes("unauthorized")
+    ) {
+      console.error(
+        "The API key appears to be invalid. Check that it is correctly set in your .env file."
+      );
+    }
+
     throw error;
   }
 };
@@ -418,26 +470,49 @@ const server = http.createServer(async (req, res) => {
             end_date
           );
 
-          // Process the data according to the requested dataset
+          // Process the data based on dataset type
           const timeSeriesData = processWeatherDataByDatasetType(
             weatherData,
             dataset_id
           );
 
-          res.writeHead(200);
+          console.log(
+            `Successfully processed ${timeSeriesData.length} data points`
+          );
+
+          // Return the processed data
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
               dataset_id,
-              location: { lat, lon },
+              name: dataset_id,
+              location: { lat, lng: lon },
               timeSeriesData,
             })
           );
-        } catch (weatherError) {
-          console.error("Error fetching real weather data:", weatherError);
+        } catch (error) {
+          console.error("Error fetching real weather data:", error.message);
           console.log("Falling back to mock data");
 
-          // Fallback to mock data if the API request fails
-          const mockData = generateTimeSeriesData(
+          // Log helpful diagnostics
+          if (
+            error.message.includes("quota") ||
+            error.message.includes("exceeded")
+          ) {
+            console.warn(
+              "API quota exceeded. Consider upgrading your Visual Crossing plan."
+            );
+          } else if (
+            error.message.includes("invalid key") ||
+            error.message.includes("unauthorized")
+          ) {
+            console.warn(
+              "API key appears to be invalid. Check your .env configuration."
+            );
+          }
+
+          // Generate mock data as fallback
+          const mockTimeSeriesData = generateTimeSeriesData(
             dataset_id,
             lat,
             lon,
@@ -445,13 +520,15 @@ const server = http.createServer(async (req, res) => {
             end_date
           );
 
-          res.writeHead(200);
+          // Return the mock data with a flag indicating it's mock data
+          res.writeHead(200, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
               dataset_id,
-              location: { lat, lon },
-              timeSeriesData: mockData,
-              source: "mock", // Indicate this is mock data
+              name: dataset_id,
+              location: { lat, lng: lon },
+              timeSeriesData: mockTimeSeriesData,
+              isMockData: true,
             })
           );
         }

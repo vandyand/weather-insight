@@ -188,6 +188,11 @@ const MapPage = () => {
   const renderCount = useRef(0);
   renderCount.current += 1;
 
+  // Add state for date range
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [dateRangeEnabled, setDateRangeEnabled] = useState(false);
+
   // State to save panel size preferences
   const [mapPanelSize, setMapPanelSize] = useState(75); // Initial map takes 75% of space
 
@@ -269,12 +274,65 @@ const MapPage = () => {
           "feels-like",
         ];
 
+        // Process date parameters with proper defaults
+        let effectiveStartDate = startDate;
+        let effectiveEndDate = endDate;
+
+        if (dateRangeEnabled) {
+          // Apply default date rules
+          if (effectiveStartDate && !effectiveEndDate) {
+            // If start date is provided but no end date, end date = start date + 15 days
+            const endDateObj = new Date(effectiveStartDate);
+            endDateObj.setDate(endDateObj.getDate() + 15);
+            effectiveEndDate = endDateObj.toISOString().split("T")[0];
+            console.log(
+              `[MapPage] No end date provided. Defaulting to start date + 15 days: ${effectiveEndDate}`
+            );
+          } else if (!effectiveStartDate && effectiveEndDate) {
+            // If end date is provided but no start date, start date = end date - 15 days
+            const startDateObj = new Date(effectiveEndDate);
+            startDateObj.setDate(startDateObj.getDate() - 15);
+            effectiveStartDate = startDateObj.toISOString().split("T")[0];
+            console.log(
+              `[MapPage] No start date provided. Defaulting to end date - 15 days: ${effectiveStartDate}`
+            );
+          } else if (!effectiveStartDate && !effectiveEndDate) {
+            // If neither is provided, use today and today + 10 days
+            const today = new Date();
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 10);
+
+            effectiveStartDate = today.toISOString().split("T")[0];
+            effectiveEndDate = futureDate.toISOString().split("T")[0];
+            console.log(
+              `[MapPage] No dates provided. Using today (${effectiveStartDate}) to today + 10 days (${effectiveEndDate})`
+            );
+          }
+        }
+
+        // Add date range parameters if enabled
+        const dateParams = dateRangeEnabled
+          ? {
+              start_date: effectiveStartDate,
+              end_date: effectiveEndDate,
+            }
+          : {};
+
+        console.log(`[MapPage] Using date parameters:`, dateParams);
+
         // Fetch data for each dataset type
         const dataPromises = availableDatasets.map(async (datasetId) => {
           console.log(
             `[MapPage] Fetching dataset ${datasetId} for coordinates ${lat}, ${lng}`
           );
-          const data = await fetchDatasetById(datasetId, { lat, lng });
+
+          // Pass date parameters to the fetch function
+          const data = await fetchDatasetById(datasetId, {
+            lat,
+            lng,
+            ...dateParams,
+          });
+
           return { datasetId, data };
         });
 
@@ -285,6 +343,12 @@ const MapPage = () => {
         const combinedData = {
           location: { lat, lng },
           timeSeriesData: [],
+          dateRange: dateRangeEnabled
+            ? {
+                startDate: effectiveStartDate,
+                endDate: effectiveEndDate,
+              }
+            : null,
         };
 
         // First, create a map of timestamps
@@ -345,7 +409,7 @@ const MapPage = () => {
         setIsLoading(false);
       }
     },
-    [fetchDatasetById]
+    [fetchDatasetById, dateRangeEnabled, startDate, endDate]
   );
 
   // Test function to manually trigger data fetch
@@ -614,6 +678,47 @@ const MapPage = () => {
     setMapPanelSize(sizes[0]);
   };
 
+  // Handle date range toggle
+  const handleDateRangeToggle = (e) => {
+    setDateRangeEnabled(e.target.checked);
+  };
+
+  // Handle date changes
+  const handleStartDateChange = (e) => {
+    setStartDate(e.target.value);
+  };
+
+  const handleEndDateChange = (e) => {
+    setEndDate(e.target.value);
+  };
+
+  // Function to get formatted date for min/max attributes
+  const getTodayFormatted = () => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  };
+
+  // Update the function to allow dates going back several years
+  const getThirtyDaysAgoFormatted = () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split("T")[0];
+  };
+
+  // Add a function to get a date 10 years ago for extended historical data
+  const getTenYearsAgoFormatted = () => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 10);
+    return date.toISOString().split("T")[0];
+  };
+
+  // Function to get formatted date 15 days in future for max attribute
+  const getFifteenDaysFutureFormatted = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 15);
+    return date.toISOString().split("T")[0];
+  };
+
   return (
     <MapPageContainer>
       {/* Debug information */}
@@ -645,7 +750,53 @@ const MapPage = () => {
                 </span>
               )}
             </Col>
-            <Col md={9} className="text-end">
+            <Col md={6}>
+              {/* Add date range controls */}
+              <Form>
+                <Form.Check
+                  type="switch"
+                  id="date-range-toggle"
+                  label="Custom Date Range"
+                  checked={dateRangeEnabled}
+                  onChange={handleDateRangeToggle}
+                  className="mb-2"
+                />
+
+                {dateRangeEnabled && (
+                  <>
+                    <Row>
+                      <Col xs={6}>
+                        <Form.Group className="mb-0">
+                          <Form.Label className="small">Start Date</Form.Label>
+                          <Form.Control
+                            type="date"
+                            size="sm"
+                            value={startDate}
+                            onChange={handleStartDateChange}
+                            min={getTenYearsAgoFormatted()}
+                            max={getTodayFormatted()}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Group className="mb-0">
+                          <Form.Label className="small">End Date</Form.Label>
+                          <Form.Control
+                            type="date"
+                            size="sm"
+                            value={endDate}
+                            onChange={handleEndDateChange}
+                            min={startDate || getTenYearsAgoFormatted()}
+                            max={getFifteenDaysFutureFormatted()}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </>
+                )}
+              </Form>
+            </Col>
+            <Col md={3} className="text-end">
               <Button
                 variant="outline-secondary"
                 onClick={() => navigate("/datasets")}
@@ -713,6 +864,24 @@ const MapPage = () => {
                     Location: {position.lat.toFixed(4)},{" "}
                     {position.lng.toFixed(4)}
                   </p>
+                  {/* Show date range if custom dates were used with data source indicator */}
+                  {weatherData.dateRange && (
+                    <div className="text-muted small mb-2">
+                      <p className="mb-1">
+                        Data range:{" "}
+                        {weatherData.dateRange.startDate || "Default start"} to{" "}
+                        {weatherData.dateRange.endDate || "Default end"}
+                      </p>
+                      <p className="mb-0">
+                        <small>
+                          <i>
+                            Data combines historical observations, current
+                            conditions, and forecast data as needed.
+                          </i>
+                        </small>
+                      </p>
+                    </div>
+                  )}
                   {renderChart()}
                   {renderDataTable()}
                   {isDevMode && (

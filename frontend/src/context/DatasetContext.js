@@ -53,13 +53,36 @@ export const DatasetProvider = ({ children }) => {
             location
           );
 
-          // Start date is today, end date is 7 days from now
-          const today = new Date();
-          const nextWeek = new Date();
-          nextWeek.setDate(today.getDate() + 7);
+          // Handle date parameters with the same defaulting logic as in MapPage
+          let startDate, endDate;
 
-          const startDate = today.toISOString().split("T")[0];
-          const endDate = nextWeek.toISOString().split("T")[0];
+          if (location.start_date && !location.end_date) {
+            // If start date is provided but no end date, end date = start date + 15 days
+            startDate = location.start_date;
+            const endDateObj = new Date(startDate);
+            endDateObj.setDate(endDateObj.getDate() + 15);
+            endDate = endDateObj.toISOString().split("T")[0];
+          } else if (!location.start_date && location.end_date) {
+            // If end date is provided but no start date, start date = end date - 15 days
+            endDate = location.end_date;
+            const startDateObj = new Date(endDate);
+            startDateObj.setDate(startDateObj.getDate() - 15);
+            startDate = startDateObj.toISOString().split("T")[0];
+          } else if (location.start_date && location.end_date) {
+            // Both dates provided
+            startDate = location.start_date;
+            endDate = location.end_date;
+          } else {
+            // Default date range (neither provided): today to 10 days from now
+            const today = new Date();
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 10);
+
+            startDate = today.toISOString().split("T")[0];
+            endDate = futureDate.toISOString().split("T")[0];
+          }
+
+          console.log(`Using date range: ${startDate} to ${endDate}`);
 
           // Prepare request params for time series data
           const params = {
@@ -78,8 +101,13 @@ export const DatasetProvider = ({ children }) => {
           } catch (err) {
             console.warn("API call failed, generating mock data instead:", err);
 
-            // Generate mock data for demonstration
-            const mockTimeSeriesData = generateMockData(id, location);
+            // Generate mock data for demonstration with date range support
+            const mockTimeSeriesData = generateMockData(
+              id,
+              location,
+              startDate,
+              endDate
+            );
 
             // Return a structure similar to what the API would return
             return {
@@ -89,6 +117,10 @@ export const DatasetProvider = ({ children }) => {
                 "Unknown Dataset",
               location: location,
               timeSeriesData: mockTimeSeriesData,
+              dateRange: {
+                startDate,
+                endDate,
+              },
             };
           }
         } else {
@@ -101,83 +133,151 @@ export const DatasetProvider = ({ children }) => {
         }
       } catch (err) {
         console.error(`Failed to fetch dataset ${id}:`, err);
-        setError("Failed to load dataset details. Please try again later.");
-
-        // Generate mock data as fallback
-        if (location) {
-          const mockData = generateMockData(id, location);
-          return {
-            dataset_id: id,
-            name: (datasets.find((d) => d.id === id) || {}).name || id,
-            location: location,
-            timeSeriesData: mockData,
-          };
-        }
-        throw err;
-      } finally {
+        setError(`Failed to load dataset ${id}. Please try again later.`);
         setLoading(false);
+        throw err;
       }
     },
     [datasets]
   );
 
-  // Helper function to generate mock data
-  const generateMockData = (datasetId, location) => {
+  // Update the mock data generation function to support extended date ranges
+  const generateMockData = (datasetId, location, startDateStr, endDateStr) => {
     console.log(`Generating mock data for dataset ${datasetId} at`, location);
+    console.log(`Using date range: ${startDateStr} to ${endDateStr}`);
+
     const mockTimeSeriesData = [];
-    const today = new Date();
     const datasetType = datasetId.split("-")[0] || datasetId; // Get base type like 'temperature'
+
+    // Parse start and end dates
+    const startDate = startDateStr ? new Date(startDateStr) : new Date();
+    const endDate = endDateStr ? new Date(endDateStr) : new Date(startDate);
+    endDate.setDate(endDate.getDate() + 7); // Default to 7 days if end date is same as start
+
+    // Calculate number of days between the dates
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+    console.log(`Total days in range: ${daysDiff}`);
+
+    // For very long date ranges, we'll sample points rather than generating every day
+    // to keep performance reasonable and avoid overwhelming the visualization
+    const MAX_DATA_POINTS = 60; // Maximum number of data points to generate
+
+    // Determine the step size (every Nth day) to limit total data points
+    const step =
+      daysDiff > MAX_DATA_POINTS ? Math.ceil(daysDiff / MAX_DATA_POINTS) : 1;
+    const pointsToGenerate = Math.min(daysDiff, MAX_DATA_POINTS);
+
+    console.log(
+      `Generating ${pointsToGenerate} data points with step size of ${step}`
+    );
 
     // Use the latitude to influence the base values for more realistic data
     // Temperatures are generally warmer near equator, colder near poles
     const latitudeFactor = Math.abs(location.lat) / 90; // 0 at equator, 1 at poles
-    
-    // Generate 7 days of data
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
+
+    // Generate seasonal patterns - more realistic for long date ranges
+    const createSeasonalValue = (date, baseValue, amplitude) => {
+      // Calculate day of year (0-365)
+      const startOfYear = new Date(date.getFullYear(), 0, 0);
+      const dayOfYear = Math.floor(
+        (date - startOfYear) / (1000 * 60 * 60 * 24)
+      );
+
+      // Seasonal variation with peaks in summer and troughs in winter
+      // Northern and Southern hemispheres have opposite seasons
+      const seasonalOffset =
+        location.lat >= 0
+          ? Math.sin(((dayOfYear - 172) / 365) * 2 * Math.PI) // Northern hemisphere
+          : Math.sin(((dayOfYear - 355) / 365) * 2 * Math.PI); // Southern hemisphere
+
+      return baseValue + seasonalOffset * amplitude;
+    };
+
+    // Climate zones rough approximation based on latitude
+    let climateZone = "temperate";
+    if (Math.abs(location.lat) < 23.5) {
+      climateZone = "tropical";
+    } else if (Math.abs(location.lat) > 66.5) {
+      climateZone = "polar";
+    }
+
+    // Generate data for each day in the range (using step size)
+    for (let i = 0; i < daysDiff; i += step) {
+      const date = new Date(startDate);
       date.setDate(date.getDate() + i);
       const formattedDate = date.toISOString().split("T")[0];
 
       // Generate different values based on dataset type with more realistic patterns
       let value;
+
+      // Use different base values and amplitudes for different climate zones
+      let baseTemp, tempAmplitude, baseHumidity, baseRain, rainProbability;
+
+      switch (climateZone) {
+        case "tropical":
+          baseTemp = 28;
+          tempAmplitude = 5;
+          baseHumidity = 80;
+          baseRain = 20;
+          rainProbability = 0.5;
+          break;
+        case "polar":
+          baseTemp = -10;
+          tempAmplitude = 20;
+          baseHumidity = 60;
+          baseRain = 5;
+          rainProbability = 0.2;
+          break;
+        default: // temperate
+          baseTemp = 15;
+          tempAmplitude = 15;
+          baseHumidity = 70;
+          baseRain = 10;
+          rainProbability = 0.3;
+      }
+
       switch (datasetType) {
         case "temperature":
-          // Temperature between -10 to 35°C depending on latitude
-          // Cooler at higher latitudes, warmer near equator
-          const baseTemp = 30 - 40 * latitudeFactor; // 30°C at equator, -10°C at poles
-          // Add daily fluctuation
-          value = baseTemp + Math.sin((i / 7) * Math.PI) * 5 + (Math.random() * 3 - 1.5);
+          // Use seasonal patterns for temperature
+          value = createSeasonalValue(date, baseTemp, tempAmplitude);
+          // Add some random variation
+          value += Math.random() * 4 - 2;
           break;
         case "feels-like":
-          // Feels like is usually similar to temperature but affected by wind and humidity
-          // We'll make it a bit different from actual temperature
-          const baseFeelsLike = 28 - 38 * latitudeFactor; 
-          value = baseFeelsLike + Math.sin((i / 7) * Math.PI) * 6 + (Math.random() * 4 - 2);
+          // Feels like is similar to temperature but affected by wind and humidity
+          value = createSeasonalValue(date, baseTemp - 1, tempAmplitude + 2);
+          value += Math.random() * 5 - 2.5;
           break;
         case "precipitation":
-          // Precipitation between 0-30mm with clustering (rainy days tend to cluster)
-          // More precipitation near equator on average
-          const rainProbability = Math.random() < 0.3 ? 0.8 : 0.2; // 30% chance of a rainy day
-          const maxRain = 30 * (1 - latitudeFactor * 0.5); // More rain near equator
-          value = Math.max(0, Math.random() * maxRain * rainProbability);
+          // Precipitation has seasonal patterns too, but more random
+          const seasonalRainFactor =
+            createSeasonalValue(date, 0, 1) * 0.5 + 0.5; // 0-1 scale
+          const isRainy = Math.random() < rainProbability * seasonalRainFactor;
+          value = isRainy ? baseRain * (0.5 + Math.random() * 1.5) : 0;
           break;
         case "humidity":
-          // Humidity between 30-95%
-          // Generally higher near equator, lower at poles and varies with precipitation
-          const baseHumidity = 90 - 50 * latitudeFactor;
-          value = Math.max(30, Math.min(95, baseHumidity + (Math.random() * 20 - 10)));
+          // Humidity correlates inversely with temperature in many climates
+          const tempValue = createSeasonalValue(date, baseTemp, tempAmplitude);
+          // In colder weather, humidity is generally higher
+          value = baseHumidity - ((tempValue - baseTemp) / tempAmplitude) * 20;
+          // Add some random variation
+          value = Math.max(30, Math.min(95, value + (Math.random() * 20 - 10)));
           break;
         case "wind-speed":
-          // Wind speed between 0-40 km/h
-          // Generally higher at higher latitudes
-          const baseWind = 10 + 30 * latitudeFactor;
-          value = Math.max(0, baseWind * (0.5 + Math.random() * 0.5));
+          // Wind tends to be higher in winter and at higher latitudes
+          const seasonalWindFactor =
+            1 - (createSeasonalValue(date, 0, 1) * 0.5 + 0.5); // Higher in winter
+          const baseWind = 10 + 20 * latitudeFactor;
+          value = baseWind * seasonalWindFactor * (0.5 + Math.random() * 0.8);
           break;
         case "cloud-cover":
-          // Cloud cover between 0-100%
-          // Correlate somewhat with precipitation
-          const rainDay = Math.random() < 0.3;
-          value = rainDay ? 60 + Math.random() * 40 : Math.random() * 60;
+          // Cloud cover often correlates with precipitation and humidity
+          const tempFactor = createSeasonalValue(date, 0, 1);
+          const isRainyDay =
+            Math.random() < rainProbability * (1 - tempFactor * 0.5);
+          value = isRainyDay
+            ? 60 + Math.random() * 40
+            : 20 + Math.random() * 50;
           break;
         default:
           value = Math.random() * 100;
