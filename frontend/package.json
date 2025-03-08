@@ -1,0 +1,50 @@
+{
+  "name": "climate-insight",
+  "version": "1.0.0",
+  "description": "Interactive climate data visualization platform",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack serve --mode development --open",
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "deploy": "npm run build && rm -rf ../resources/public/* && cp -r dist/* ../resources/public/",
+    "deploy:dev": "npm run build:dev && rm -rf ../resources/public/* && cp -r dist/* ../resources/public/",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "climate",
+    "data",
+    "visualization",
+    "mapbox",
+    "react"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "apexcharts": "^4.5.0",
+    "axios": "^1.6.7",
+    "bootstrap": "^5.3.2",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.2.0",
+    "react": "^18.2.0",
+    "react-apexcharts": "^1.7.0",
+    "react-bootstrap": "^2.10.9",
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
+    "react-router-dom": "^7.3.0",
+    "styled-components": "^6.1.8"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.3",
+    "@babel/preset-env": "^7.24.3",
+    "@babel/preset-react": "^7.24.1",
+    "babel-loader": "^10.0.0",
+    "css-loader": "^7.1.2",
+    "dotenv-webpack": "^8.0.1",
+    "html-webpack-plugin": "^5.6.0",
+    "style-loader": "^4.0.0",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.0"
+  }
+}

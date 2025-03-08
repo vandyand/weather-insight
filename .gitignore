@@ -1,22 +1,10 @@
-# Clojure
-.cpcache/
-.nrepl-port
-.clj-kondo/.cache
-.lsp/.cache
-
-# ClojureScript
-.shadow-cljs/
-resources/public/js
 node_modules/
+
+frontend/node_modules/
+frontend/dist/
 
 # macOS
 .DS_Store
-
-# IDEs
-.idea/
-*.iml
-.vscode/
-.calva/
 
 # Logs and artifacts
 log/

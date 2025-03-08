@@ -8,6 +8,7 @@
             [reitit.ring.middleware.parameters :as parameters]
             [muuntaja.core :as m]
             [climate-insight.handlers.climate-data :as climate-data]
+            [climate-insight.handlers.weather-data :as weather-data]
             [climate-insight.handlers.auth :as auth]))
 
 (defn health-handler
@@ -61,7 +62,20 @@
                                                    [:lon number?]
                                                    [:start-date string?]
                                                    [:end-date string?]]}
-                               :handler climate-data/get-time-series}}]]]
+                               :handler climate-data/get-time-series}}]]
+
+      ;; Weather data endpoints (using Visual Crossing API)
+      ["/weather"
+       ["/timeline" {:get {:summary "Get historical weather data for a location and date range"
+                           :parameters {:query [:map
+                                                [:location string?]
+                                                [:start-date string?]
+                                                [:end-date string?]]}
+                           :handler weather-data/weather-timeline-handler}}]
+       ["/forecast" {:get {:summary "Get forecast weather data for a location"
+                           :parameters {:query [:map
+                                                [:location string?]]}
+                           :handler weather-data/weather-forecast-handler}}]]]
 
      ;; Serve the frontend SPA for any other paths
      ["/*" {:get {:no-doc true

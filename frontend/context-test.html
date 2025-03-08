@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React Context Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      .component {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .debug {
+        background-color: #f8f9fa;
+        padding: 10px;
+        margin-top: 10px;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      button {
+        margin: 5px;
+        padding: 5px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>React Context Testing</h1>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      // Create a sample context similar to DatasetContext
+      const DatasetContext = React.createContext();
+
+      const DatasetProvider = ({ children }) => {
+        const [datasets, setDatasets] = React.useState([
+          { id: "dataset1", name: "Temperature" },
+          { id: "dataset2", name: "Precipitation" },
+          { id: "dataset3", name: "Wind Speed" },
+        ]);
+
+        const [selectedDataset, setSelectedDataset] = React.useState("");
+        const [isLoading, setIsLoading] = React.useState(false);
+
+        // Simulate fetchDatasetById
+        const fetchDatasetById = async (id, location) => {
+          console.log(`Fetching dataset ${id} for location:`, location);
+          setIsLoading(true);
+
+          // Simulate API call
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          setIsLoading(false);
+          return {
+            id,
+            name: datasets.find((d) => d.id === id)?.name || "Unknown",
+            location,
+            timeSeriesData: [
+              { timestamp: "2023-06-01", value: Math.random() * 100 },
+              { timestamp: "2023-06-02", value: Math.random() * 100 },
+              { timestamp: "2023-06-03", value: Math.random() * 100 },
+            ],
+          };
+        };
+
+        const value = {
+          datasets,
+          selectedDataset,
+          setSelectedDataset,
+          isLoading,
+          fetchDatasetById,
+        };
+
+        return (
+          <DatasetContext.Provider value={value}>
+            {children}
+          </DatasetContext.Provider>
+        );
+      };
+
+      // Custom hook to use the context
+      const useDatasetContext = () => {
+        const context = React.useContext(DatasetContext);
+        if (!context) {
+          throw new Error(
+            "useDatasetContext must be used within a DatasetProvider"
+          );
+        }
+        return context;
+      };
+
+      // Parent component similar to MapPage
+      const MapPage = () => {
+        const {
+          datasets,
+          selectedDataset,
+          setSelectedDataset,
+          isLoading,
+          fetchDatasetById,
+        } = useDatasetContext();
+
+        // Internal state for active dataset
+        const [activeDatasetId, setActiveDatasetId] = React.useState("");
+        const [weatherData, setWeatherData] = React.useState(null);
+        const [clickLocation, setClickLocation] = React.useState(null);
+
+        // Debug counter
+        const renderCount = React.useRef(0);
+
+        // Effect to sync internal state with context
+        React.useEffect(() => {
+          console.log(
+            `Render #${renderCount.current + 1}, selectedDataset:`,
+            selectedDataset
+          );
+          renderCount.current += 1;
+
+          if (selectedDataset) {
+            console.log(`Updating activeDatasetId to:`, selectedDataset);
+            setActiveDatasetId(selectedDataset);
+          }
+        }, [selectedDataset]);
+
+        // Change handler with debugging
+        const handleDatasetChange = (e) => {
+          const newId = e.target.value;
+          console.log(`Dataset changed to:`, newId);
+
+          // Update internal state first
+          setActiveDatasetId(newId);
+
+          // Then update context
+          setSelectedDataset(newId);
+        };
+
+        // Simulate map click
+        const handleMapClick = async () => {
+          // Generate random coordinates
+          const location = {
+            lat: Math.random() * 180 - 90,
+            lng: Math.random() * 360 - 180,
+          };
+          console.log(`Map clicked at:`, location);
+          console.log(`Current activeDatasetId:`, activeDatasetId);
+          setClickLocation(location);
+
+          if (!activeDatasetId) {
+            console.log(`No dataset selected!`);
+            return;
+          }
+
+          try {
+            const data = await fetchDatasetById(activeDatasetId, location);
+            console.log(`Fetched data:`, data);
+            setWeatherData(data);
+          } catch (err) {
+            console.error(`Error:`, err);
+          }
+        };
+
+        return (
+          <div className="component">
+            <h2>Map Page Component</h2>
+            <div>
+              <label htmlFor="dataset-select">Select Dataset: </label>
+              <select
+                id="dataset-select"
+                value={activeDatasetId}
+                onChange={handleDatasetChange}
+              >
+                <option value="">-- Select Dataset --</option>
+                {datasets.map((dataset) => (
+                  <option key={dataset.id} value={dataset.id}>
+                    {dataset.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginTop: "10px" }}>
+              <button onClick={handleMapClick}>Simulate Map Click</button>
+            </div>
+
+            {isLoading && <div>Loading...</div>}
+
+            {weatherData && (
+              <div>
+                <h3>Weather Data</h3>
+                <div>Dataset: {weatherData.name}</div>
+                <div>Location: {JSON.stringify(weatherData.location)}</div>
+                <div>
+                  <h4>Time Series</h4>
+                  <ul>
+                    {weatherData.timeSeriesData.map((item, i) => (
+                      <li key={i}>
+                        {item.timestamp}: {item.value.toFixed(2)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            <div className="debug">
+              <div>Debug Info:</div>
+              <div>activeDatasetId: {activeDatasetId || "none"}</div>
+              <div>selectedDataset: {selectedDataset || "none"}</div>
+              <div>
+                clickLocation:{" "}
+                {clickLocation ? JSON.stringify(clickLocation) : "none"}
+              </div>
+              <div>renderCount: {renderCount.current}</div>
+              <div>hasWeatherData: {weatherData ? "true" : "false"}</div>
+            </div>
+          </div>
+        );
+      };
+
+      // App component
+      const App = () => {
+        return (
+          <DatasetProvider>
+            <MapPage />
+          </DatasetProvider>
+        );
+      };
+
+      // Render the app
+      ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+  </body>
+</html>

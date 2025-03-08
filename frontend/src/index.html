@@ -21,7 +21,7 @@
     />
     <!-- Mapbox token -->
     <script>
-      window.MAPBOX_TOKEN = "sk.eyJ1IjoidmFuZHlhbmQiLCJhIjoiY203d25iOTVqMDBqNjJ0bzc4NDNwZ2lkYSJ9.LY9s0hOgupL4cFURhI2Q9Q";
+      window.MAPBOX_TOKEN = "<%= mapboxToken %>";
       console.log(
         "Mapbox token set in HTML, length: " + window.MAPBOX_TOKEN.length
       );
@@ -36,5 +36,5 @@
   </head>
   <body>
     <div id="root"></div>
-  <script src="/bundle.js"></script></body>
+  </body>
 </html>
