@@ -16,12 +16,6 @@ ClimateInsight is a full-stack React/Node.js application for visualizing climate
 - **Maps**: Leaflet JS integration
 - **Weather Data**: Visual Crossing Weather API
 
-## UI
-
-![Weather Map Explorer](resources/images/weather-map-explorer.jpg)
-
-The Weather Map Explorer interface provides an interactive map view for exploring climate data geographically. Users can click on locations to view detailed weather information. The interface includes weather graph options for temperature, precipitation, wind speed, uv index, and humidity.
-
 ## Getting Started
 
 ### Prerequisites

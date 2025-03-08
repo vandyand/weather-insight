@@ -146,7 +146,6 @@ const MapPage = () => {
   const [position, setPosition] = useState({ lat: 51.505, lng: -0.09 });
   const [weatherData, setWeatherData] = useState(null);
   const [processedData, setProcessedData] = useState(null);
-  const [activeDatasetId, setActiveDatasetId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mapInitialized, setMapInitialized] = useState(false);
@@ -170,7 +169,6 @@ const MapPage = () => {
     const datasetParam = params.get("dataset");
     if (datasetParam) {
       console.log(`[MapPage] Found dataset in URL: ${datasetParam}`);
-      setActiveDatasetId(datasetParam);
       setSelectedDataset(datasetParam);
     }
   }, [location.search, setSelectedDataset]);
@@ -185,17 +183,12 @@ const MapPage = () => {
 
     if (selectedDataset) {
       console.log(
-        `[MapPage] Updating activeDatasetId to match context:`,
+        `[MapPage] Updating selectedDataset to match context:`,
         selectedDataset
       );
-      setActiveDatasetId(selectedDataset);
+      setSelectedDataset(selectedDataset);
     }
   }, [selectedDataset]);
-
-  // Log dataset changes
-  useEffect(() => {
-    console.log(`[MapPage] activeDatasetId changed to:`, activeDatasetId);
-  }, [activeDatasetId]);
 
   // Initialize map when component mounts - keep for compatibility
   const handleMapInit = useCallback((map) => {
@@ -212,34 +205,10 @@ const MapPage = () => {
     });
   }, []);
 
-  // Dataset selection handler
-  const handleDatasetChange = (e) => {
-    const newDatasetId = e.target.value;
-    console.log(`[MapPage] Dataset changed in dropdown to:`, newDatasetId);
-
-    // Update internal state immediately
-    setActiveDatasetId(newDatasetId);
-
-    // Update URL
-    navigate(`/map?dataset=${newDatasetId}`);
-
-    // Then update context (async)
-    setSelectedDataset(newDatasetId);
-  };
-
   // Map click handler - wrapped in useCallback to prevent recreation on every render
   const handleMapClick = useCallback(
     async (e) => {
       console.log(`[MapPage] Map click handler called, coordinates:`, e.latlng);
-      console.log(`[MapPage] Current activeDatasetId:`, activeDatasetId);
-
-      if (!activeDatasetId) {
-        console.log(
-          `[MapPage] ⚠️ No dataset selected (activeDatasetId is empty)`
-        );
-        setError("Please select a dataset first");
-        return;
-      }
 
       const { lat, lng } = e.latlng;
       console.log(`[MapPage] Processing click at coordinates: ${lat}, ${lng}`);
@@ -249,23 +218,89 @@ const MapPage = () => {
 
       try {
         console.log(
-          `[MapPage] Fetching dataset ${activeDatasetId} for coordinates ${lat}, ${lng}`
-        );
-        console.log(
-          "[MapPage] Calling fetchDatasetById with:",
-          activeDatasetId,
-          { lat, lng }
+          `[MapPage] Fetching all weather data for coordinates ${lat}, ${lng}`
         );
 
-        const data = await fetchDatasetById(activeDatasetId, { lat, lng });
-        console.log(`[MapPage] Dataset fetch result:`, data);
+        // Create an object to store all dataset results
+        const allDatasets = {};
+        const availableDatasets = [
+          "temperature",
+          "precipitation",
+          "humidity",
+          "wind-speed",
+          "cloud-cover",
+          "feels-like",
+        ];
 
-        if (!data || !data.timeSeriesData) {
-          throw new Error("Failed to fetch weather data");
-        }
+        // Fetch data for each dataset type
+        const dataPromises = availableDatasets.map(async (datasetId) => {
+          console.log(
+            `[MapPage] Fetching dataset ${datasetId} for coordinates ${lat}, ${lng}`
+          );
+          const data = await fetchDatasetById(datasetId, { lat, lng });
+          return { datasetId, data };
+        });
 
-        setWeatherData(data);
-        setProcessedData(data);
+        // Wait for all data to be fetched
+        const results = await Promise.all(dataPromises);
+
+        // Process and combine the results
+        const combinedData = {
+          location: { lat, lng },
+          timeSeriesData: [],
+        };
+
+        // First, create a map of timestamps
+        const timestampMap = {};
+
+        // Process each dataset result
+        results.forEach(({ datasetId, data }) => {
+          if (data && data.timeSeriesData) {
+            // Store the dataset in our collection
+            allDatasets[datasetId] = data;
+
+            // For each time series data point
+            data.timeSeriesData.forEach((point) => {
+              if (!timestampMap[point.timestamp]) {
+                timestampMap[point.timestamp] = { timestamp: point.timestamp };
+              }
+
+              // Add this dataset's value to the timestamp entry
+              timestampMap[point.timestamp][datasetId] = point.value;
+            });
+          }
+        });
+
+        // Convert the map to an array sorted by timestamp
+        combinedData.timeSeriesData = Object.values(timestampMap).sort(
+          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        );
+
+        // Calculate min and max values for each dataset type for normalization
+        const minMaxValues = {};
+        availableDatasets.forEach((datasetId) => {
+          const values = combinedData.timeSeriesData
+            .map((point) => point[datasetId])
+            .filter((value) => value !== undefined);
+
+          if (values.length > 0) {
+            minMaxValues[datasetId] = {
+              min: Math.min(...values),
+              max: Math.max(...values),
+            };
+          }
+        });
+
+        // Store the min/max values for use in chart rendering
+        combinedData.minMaxValues = minMaxValues;
+
+        console.log(`[MapPage] Combined weather data:`, combinedData);
+
+        setWeatherData({
+          ...combinedData,
+          allDatasets, // Keep the original datasets too for reference
+        });
+        setProcessedData(combinedData);
         setIsLoading(false);
       } catch (err) {
         console.error(`[MapPage] Error fetching data:`, err);
@@ -273,13 +308,13 @@ const MapPage = () => {
         setIsLoading(false);
       }
     },
-    [activeDatasetId, fetchDatasetById]
+    [fetchDatasetById]
   );
 
   // Test function to manually trigger data fetch
   const testFetchData = () => {
     console.log("[MapPage] Manual test fetch triggered");
-    if (!activeDatasetId) {
+    if (!selectedDataset) {
       alert("Please select a dataset first");
       return;
     }
@@ -294,27 +329,73 @@ const MapPage = () => {
   const renderChart = () => {
     if (!weatherData || !weatherData.timeSeriesData) return null;
 
-    const { timeSeriesData } = weatherData;
+    const { timeSeriesData, minMaxValues } = weatherData;
 
-    const series = Object.keys(timeSeriesData[0])
-      .filter((key) => key !== "timestamp")
-      .map((key) => ({
-        name: key,
-        data: timeSeriesData.map((point) => [
+    // Define colors for each dataset type
+    const colorMap = {
+      temperature: "#FF5733", // Orange-red
+      precipitation: "#3498DB", // Blue
+      humidity: "#2ECC71", // Green
+      "wind-speed": "#9B59B6", // Purple
+      "cloud-cover": "#7F8C8D", // Gray
+      "feels-like": "#F1C40F", // Yellow
+    };
+
+    // Get all dataset types present in the data
+    const datasetTypes = Object.keys(timeSeriesData[0]).filter(
+      (key) => key !== "timestamp"
+    );
+
+    // Map each dataset type to a series, applying min-max normalization
+    const series = datasetTypes.map((datasetType) => {
+      // Get min and max values for this dataset type
+      const minMax = minMaxValues[datasetType];
+
+      // Create normalized data points
+      const normalizedData = timeSeriesData.map((point) => {
+        const timestamp = new Date(point.timestamp).getTime();
+        const rawValue = point[datasetType];
+
+        // Skip points with undefined values
+        if (rawValue === undefined) return [timestamp, null];
+
+        // Apply min-max normalization if we have valid min/max values
+        if (minMax && minMax.max !== minMax.min) {
+          const normalizedValue =
+            (rawValue - minMax.min) / (minMax.max - minMax.min);
+          return [timestamp, normalizedValue];
+        }
+
+        // If min equals max (no variation), return 0.5 as normalized value
+        return [timestamp, 0.5];
+      });
+
+      return {
+        name: formatDatasetName(datasetType),
+        data: normalizedData,
+        color: colorMap[datasetType],
+        // Store original values for tooltips
+        _original: timeSeriesData.map((point) => [
           new Date(point.timestamp).getTime(),
-          point[key],
+          point[datasetType] || null,
         ]),
-      }));
+      };
+    });
 
     const options = {
       chart: {
         type: "line",
         zoom: { enabled: false },
+        animations: { enabled: true },
       },
       dataLabels: { enabled: false },
       stroke: { curve: "smooth", width: 2 },
       title: {
-        text: "Weather Forecast",
+        text: "Weather Forecast (Normalized Scale)",
+        align: "left",
+      },
+      subtitle: {
+        text: "All data series normalized to 0-1 scale for comparison",
         align: "left",
       },
       xaxis: {
@@ -325,14 +406,82 @@ const MapPage = () => {
           },
         },
       },
+      yaxis: {
+        min: 0,
+        max: 1,
+        title: {
+          text: "Normalized Value (0-1)",
+        },
+        labels: {
+          formatter: function (value) {
+            return value.toFixed(1);
+          },
+        },
+      },
       tooltip: {
+        shared: true,
+        intersect: false,
+        y: {
+          formatter: function (value, { seriesIndex, dataPointIndex, w }) {
+            // Use original values for tooltip
+            const originalValue =
+              w.config.series[seriesIndex]._original[dataPointIndex][1];
+            if (originalValue === null) return "N/A";
+
+            const datasetType = datasetTypes[seriesIndex];
+            return `${originalValue.toFixed(2)} ${getUnitByDatasetId(
+              datasetType
+            )}`;
+          },
+        },
         x: {
           format: "dd MMM yyyy",
         },
       },
+      legend: {
+        position: "top",
+        formatter: function (seriesName, opts) {
+          const datasetType = datasetTypes[opts.seriesIndex];
+          const minMax = minMaxValues[datasetType];
+          if (minMax) {
+            return `${seriesName} (${minMax.min.toFixed(
+              1
+            )}-${minMax.max.toFixed(1)} ${getUnitByDatasetId(datasetType)})`;
+          }
+          return `${seriesName} (${getUnitByDatasetId(datasetType)})`;
+        },
+      },
+      markers: {
+        size: 4,
+        hover: {
+          size: 6,
+        },
+      },
+      theme: {
+        palette: "palette1",
+      },
+      responsive: [
+        {
+          breakpoint: 480,
+          options: {
+            legend: {
+              position: "bottom",
+              offsetY: 0,
+            },
+          },
+        },
+      ],
     };
 
-    return <Chart options={options} series={series} height={300} />;
+    return <Chart options={options} series={series} height={350} />;
+  };
+
+  // Helper function to format dataset names for display
+  const formatDatasetName = (datasetId) => {
+    return datasetId
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   };
 
   // Render data table for time series data
@@ -340,6 +489,11 @@ const MapPage = () => {
     if (!weatherData || !weatherData.timeSeriesData) return null;
 
     const { timeSeriesData } = weatherData;
+
+    // Get all dataset types present in the data
+    const datasetTypes = Object.keys(timeSeriesData[0]).filter(
+      (key) => key !== "timestamp"
+    );
 
     // Format the date for better readability
     const formattedData = timeSeriesData.map((point) => ({
@@ -350,22 +504,30 @@ const MapPage = () => {
     return (
       <div className="mt-4">
         <h6>Data Table</h6>
-        <div style={{ maxHeight: "250px", overflowY: "auto" }}>
+        <div>
           <table className="table table-sm table-striped">
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Value</th>
+                {datasetTypes.map((datasetType) => (
+                  <th key={datasetType}>
+                    {formatDatasetName(datasetType)} (
+                    {getUnitByDatasetId(datasetType)})
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {formattedData.map((point, index) => (
                 <tr key={index}>
                   <td>{point.formattedDate}</td>
-                  <td>
-                    {point.value.toFixed(2)}{" "}
-                    {getUnitByDatasetId(activeDatasetId)}
-                  </td>
+                  {datasetTypes.map((datasetType) => (
+                    <td key={datasetType}>
+                      {point[datasetType] !== undefined
+                        ? point[datasetType].toFixed(2)
+                        : "N/A"}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -402,74 +564,31 @@ const MapPage = () => {
         <div>
           <strong>Debug Info:</strong>
         </div>
-        <div>Active Dataset: {activeDatasetId || "none"}</div>
-        <div>Context Selected: {selectedDataset || "none"}</div>
-        <div>Datasets Count: {datasets?.length || 0}</div>
-        <div>Loading: {isLoading ? "true" : "false"}</div>
-        <div>Dataset Loading: {isDatasetLoading ? "true" : "false"}</div>
+        <div>Render count: {renderCount.current}</div>
+        <div>Map initialized: {mapInitialized ? "Yes" : "No"}</div>
         <div>
-          Position:{" "}
-          {position
-            ? `${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`
-            : "none"}
+          Selected coordinates: {position?.lat.toFixed(4)},{" "}
+          {position?.lng.toFixed(4)}
         </div>
-        <div>Render Count: {renderCount.current}</div>
-        <div>Map Initialized: {mapInitialized ? "yes" : "no"}</div>
-        <div>Processed Data: {processedData ? "✓" : "✗"}</div>
-        <div>
-          Mapbox Token:{" "}
-          {window.MAPBOX_TOKEN
-            ? `${window.MAPBOX_TOKEN.substring(0, 10)}...`
-            : "missing"}
-        </div>
-        <button
-          onClick={testFetchData}
-          style={{ marginTop: "8px", padding: "4px 8px", fontSize: "12px" }}
-        >
-          Test Fetch Data
-        </button>
+        <div>Data loading: {isLoading ? "Yes" : "No"}</div>
+        <div>Available datasets: {datasets ? datasets.length : 0}</div>
+        <Button size="sm" onClick={testFetchData}>
+          Test Fetch
+        </Button>
       </DebugInfo>
 
       <MapHeader>
-        <Container fluid>
+        <Container>
           <Row className="align-items-center">
             <Col md={3}>
-              <h4>Weather Map Explorer</h4>
-              {isDevMode && (
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    backgroundColor: "#f0ad4e",
-                    color: "#fff",
-                    padding: "1px 5px",
-                    borderRadius: "3px",
-                    marginLeft: "8px",
-                  }}
-                >
-                  DEV MODE
+              <h5 className="mb-0">Climate Insight Map</h5>
+              {isLoading && (
+                <span className="text-muted ml-2">
+                  <small>Loading...</small>
                 </span>
               )}
             </Col>
-            <Col md={3}>
-              <Form.Group>
-                <Form.Label>Select Dataset</Form.Label>
-                <Form.Control
-                  as="select"
-                  value={activeDatasetId}
-                  onChange={handleDatasetChange}
-                  disabled={isDatasetLoading}
-                >
-                  <option value="">-- Select Dataset --</option>
-                  {datasets &&
-                    datasets.map((dataset) => (
-                      <option key={dataset.id} value={dataset.id}>
-                        {dataset.name}
-                      </option>
-                    ))}
-                </Form.Control>
-              </Form.Group>
-            </Col>
-            <Col md={6} className="text-end">
+            <Col md={9} className="text-end">
               <Button
                 variant="outline-secondary"
                 onClick={() => navigate("/datasets")}
@@ -514,11 +633,6 @@ const MapPage = () => {
           ) : !weatherData ? (
             <NoSelection>
               <p>Click on the map to view weather data for that location.</p>
-              {!activeDatasetId && (
-                <div className="alert alert-warning">
-                  Please select a dataset first
-                </div>
-              )}
             </NoSelection>
           ) : (
             <div>

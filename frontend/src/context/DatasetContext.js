@@ -128,38 +128,56 @@ export const DatasetProvider = ({ children }) => {
     const today = new Date();
     const datasetType = datasetId.split("-")[0] || datasetId; // Get base type like 'temperature'
 
+    // Use the latitude to influence the base values for more realistic data
+    // Temperatures are generally warmer near equator, colder near poles
+    const latitudeFactor = Math.abs(location.lat) / 90; // 0 at equator, 1 at poles
+    
     // Generate 7 days of data
     for (let i = 0; i < 7; i++) {
       const date = new Date(today);
       date.setDate(date.getDate() + i);
       const formattedDate = date.toISOString().split("T")[0];
 
-      // Generate different values based on dataset type
+      // Generate different values based on dataset type with more realistic patterns
       let value;
       switch (datasetType) {
         case "temperature":
-          // Temperature between 10-30°C with some randomness
-          value = 15 + Math.sin((i / 7) * Math.PI) * 10 + Math.random() * 5;
+          // Temperature between -10 to 35°C depending on latitude
+          // Cooler at higher latitudes, warmer near equator
+          const baseTemp = 30 - 40 * latitudeFactor; // 30°C at equator, -10°C at poles
+          // Add daily fluctuation
+          value = baseTemp + Math.sin((i / 7) * Math.PI) * 5 + (Math.random() * 3 - 1.5);
+          break;
+        case "feels-like":
+          // Feels like is usually similar to temperature but affected by wind and humidity
+          // We'll make it a bit different from actual temperature
+          const baseFeelsLike = 28 - 38 * latitudeFactor; 
+          value = baseFeelsLike + Math.sin((i / 7) * Math.PI) * 6 + (Math.random() * 4 - 2);
           break;
         case "precipitation":
-          // Precipitation between 0-30mm
-          value = Math.max(0, Math.random() * 30);
+          // Precipitation between 0-30mm with clustering (rainy days tend to cluster)
+          // More precipitation near equator on average
+          const rainProbability = Math.random() < 0.3 ? 0.8 : 0.2; // 30% chance of a rainy day
+          const maxRain = 30 * (1 - latitudeFactor * 0.5); // More rain near equator
+          value = Math.max(0, Math.random() * maxRain * rainProbability);
           break;
         case "humidity":
-          // Humidity between 30-90%
-          value = 30 + Math.random() * 60;
+          // Humidity between 30-95%
+          // Generally higher near equator, lower at poles and varies with precipitation
+          const baseHumidity = 90 - 50 * latitudeFactor;
+          value = Math.max(30, Math.min(95, baseHumidity + (Math.random() * 20 - 10)));
           break;
         case "wind-speed":
-          // Wind speed between 0-30 km/h
-          value = Math.random() * 30;
-          break;
-        case "uv-index":
-          // UV index between 0-12
-          value = Math.random() * 12;
+          // Wind speed between 0-40 km/h
+          // Generally higher at higher latitudes
+          const baseWind = 10 + 30 * latitudeFactor;
+          value = Math.max(0, baseWind * (0.5 + Math.random() * 0.5));
           break;
         case "cloud-cover":
           // Cloud cover between 0-100%
-          value = Math.random() * 100;
+          // Correlate somewhat with precipitation
+          const rainDay = Math.random() < 0.3;
+          value = rainDay ? 60 + Math.random() * 40 : Math.random() * 60;
           break;
         default:
           value = Math.random() * 100;
