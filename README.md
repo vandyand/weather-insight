@@ -13,8 +13,14 @@ ClimateInsight is a full-stack React/Node.js application for visualizing climate
 
 - **Frontend**: React.js with Styled Components and Context API for state management
 - **Backend**: Node.js with HTTP server
-- **Maps**: Mapbox GL integration
+- **Maps**: Leaflet JS integration
 - **Weather Data**: Visual Crossing Weather API
+
+## UI
+
+![Weather Map Explorer](resources/images/weather-map-explorer.jpg)
+
+The Weather Map Explorer interface provides an interactive map view for exploring climate data geographically. Users can click on locations to view detailed weather information. The interface includes weather graph options for temperature, precipitation, wind speed, uv index, and humidity.
 
 ## Getting Started
 
@@ -27,8 +33,8 @@ ClimateInsight is a full-stack React/Node.js application for visualizing climate
 1. Clone the repository:
 
    ```
-   git clone https://github.com/yourusername/climate-insight.git
-   cd climate-insight
+   git clone https://github.com/vandyand/weather-insight.git
+   cd weather-insight
    ```
 
 2. Start the application:
@@ -55,8 +61,6 @@ ClimateInsight is a full-stack React/Node.js application for visualizing climate
     - `/context` - React Context for state management
     - `/pages` - Page components
     - `/services` - API services
-    - `/hooks` - Custom React hooks
-    - `/utils` - Utility functions
 - `/resources` - Static resources
   - `/public` - Public assets (built React app)
 
@@ -78,4 +82,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Acknowledgements
 
 - Weather data provided by Visual Crossing Weather API
-- Mapbox for their mapping platform
+- Leaflet JS for their mapping platform
