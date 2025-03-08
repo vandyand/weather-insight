@@ -743,7 +743,7 @@ const MapPage = () => {
         <Container>
           <Row className="align-items-center">
             <Col md={3}>
-              <h5 className="mb-0">Climate Insight Map</h5>
+              <h5 className="mb-0">Weather Explorer Map</h5>
               {isLoading && (
                 <span className="text-muted ml-2">
                   <small>Loading...</small>

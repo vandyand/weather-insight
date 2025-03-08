@@ -4,19 +4,20 @@
   "description": "A geospatial visualization platform for climate data",
   "main": "index.js",
   "scripts": {
-    "dev": "shadow-cljs watch app",
-    "build": "shadow-cljs release app",
-    "server": "clojure -M:dev"
+    "dev": "./start-react-app.sh",
+    "build": "cd frontend && npm run build",
+    "server": "node server.js"
   },
   "keywords": [
-    "climate",
+    "weather",
+    "react",
+    "leaflet",
+    "nodejs",
+    "express",
     "geospatial",
-    "clojure",
-    "clojurescript",
-    "mapbox",
     "visualization"
   ],
-  "author": "Your Name",
+  "author": "Andrew VanDyke",
   "license": "MIT",
   "dependencies": {
     "dotenv": "^16.4.7",
