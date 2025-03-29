@@ -193,12 +193,12 @@ export const DatasetProvider = ({ children }) => {
       return baseValue + seasonalOffset * amplitude;
     };
 
-    // Climate zones rough approximation based on latitude
-    let climateZone = "temperate";
+    // Weather zones rough approximation based on latitude
+    let weatherZone = "temperate";
     if (Math.abs(location.lat) < 23.5) {
-      climateZone = "tropical";
+      weatherZone = "tropical";
     } else if (Math.abs(location.lat) > 66.5) {
-      climateZone = "polar";
+      weatherZone = "polar";
     }
 
     // Generate data for each day in the range (using step size)
@@ -210,10 +210,10 @@ export const DatasetProvider = ({ children }) => {
       // Generate different values based on dataset type with more realistic patterns
       let value;
 
-      // Use different base values and amplitudes for different climate zones
+      // Use different base values and amplitudes for different weather zones
       let baseTemp, tempAmplitude, baseHumidity, baseRain, rainProbability;
 
-      switch (climateZone) {
+      switch (weatherZone) {
         case "tropical":
           baseTemp = 28;
           tempAmplitude = 5;

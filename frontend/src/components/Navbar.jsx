@@ -72,7 +72,7 @@ const Navbar = () => {
   return (
     <Nav>
       <NavContainer>
-        <Logo to="/">ClimateInsight</Logo>
+        <Logo to="/">WeatherMap Explorer</Logo>
 
         <NavLinks>
           {isAuthenticated ? (

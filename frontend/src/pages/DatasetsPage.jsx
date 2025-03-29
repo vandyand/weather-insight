@@ -130,7 +130,7 @@ const DatasetsPage = () => {
 
   return (
     <Container>
-      <Title>Available Climate Datasets</Title>
+      <Title>Available Weather Datasets</Title>
 
       {isLoading ? (
         <Loading>

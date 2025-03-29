@@ -135,15 +135,15 @@ const HomePage = () => {
   return (
     <HomeContainer>
       <HeroSection>
-        <Title>ClimateInsight</Title>
+        <Title>WeatherMap Explorer</Title>
         <Subtitle>
-          An interactive platform for visualizing climate data through maps and
+          An interactive platform for visualizing weather data through maps and
           time-series graphs
         </Subtitle>
 
         <ButtonContainer>
           {isAuthenticated ? (
-            <Button to="/map">Explore Climate Data</Button>
+            <Button to="/map">Explore Weather Data</Button>
           ) : (
             <>
               <Button to="/login">Get Started</Button>
@@ -161,7 +161,7 @@ const HomePage = () => {
           <FeatureCard>
             <FeatureTitle>Interactive Maps</FeatureTitle>
             <FeatureDescription>
-              Explore climate data spatially with interactive maps powered by
+              Explore weather data spatially with interactive maps powered by
               Mapbox GL.
             </FeatureDescription>
           </FeatureCard>
@@ -170,14 +170,14 @@ const HomePage = () => {
             <FeatureTitle>Time Series Analysis</FeatureTitle>
             <FeatureDescription>
               Analyze trends over time with interactive charts showing
-              historical climate data.
+              historical weather data.
             </FeatureDescription>
           </FeatureCard>
 
           <FeatureCard>
             <FeatureTitle>Multiple Datasets</FeatureTitle>
             <FeatureDescription>
-              Access various climate datasets including temperature,
+              Access various weather datasets including temperature,
               precipitation, and more.
             </FeatureDescription>
           </FeatureCard>

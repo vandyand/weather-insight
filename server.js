@@ -291,7 +291,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Handle dataset API endpoints
-    if (req.url === "/api/climate-data/datasets" && req.method === "GET") {
+    if (req.url === "/api/weather-data/datasets" && req.method === "GET") {
       const datasets = [
         {
           id: "temperature",
@@ -422,8 +422,8 @@ const server = http.createServer(async (req, res) => {
 
     // Handle time-series data requests
     if (
-      (req.url === "/api/climate-data/time-series" ||
-        req.url === "/api/climate-data/time-series/") &&
+      (req.url === "/api/weather-data/time-series" ||
+        req.url === "/api/weather-data/time-series/") &&
       req.method === "POST"
     ) {
       console.log("Time-series endpoint hit!");
@@ -558,8 +558,8 @@ const server = http.createServer(async (req, res) => {
           { method: "GET", url: "/api/test" },
           { method: "POST", url: "/api/auth/login" },
           { method: "POST", url: "/api/auth/register" },
-          { method: "GET", url: "/api/climate-data/datasets" },
-          { method: "POST", url: "/api/climate-data/time-series" },
+          { method: "GET", url: "/api/weather-data/datasets" },
+          { method: "POST", url: "/api/weather-data/time-series" },
           { method: "GET", url: "/api/weather/timeline" },
           { method: "GET", url: "/api/weather/forecast" },
         ],

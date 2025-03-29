@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Starting ClimateInsight React application"
+echo "Starting WeatherMap Explorer application"
 
 # Change to the project root directory
 cd "$(dirname "$0")"
@@ -29,7 +29,7 @@ echo "Starting the Node.js server..."
 node server.js &
 SERVER_PID=$!
 
-echo "ClimateInsight is now running!"
+echo "WeatherMap Explorer is now running!"
 echo "Access the application at http://localhost:8080"
 echo "Press Ctrl+C to stop the application"
 

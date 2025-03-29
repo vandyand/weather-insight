@@ -1,7 +1,7 @@
 {
-  "name": "climate-insight",
+  "name": "weather-map-explorer",
   "version": "0.1.0",
-  "description": "A geospatial visualization platform for climate data",
+  "description": "An interactive weather map visualization platform",
   "main": "index.js",
   "scripts": {
     "dev": "./start-react-app.sh",

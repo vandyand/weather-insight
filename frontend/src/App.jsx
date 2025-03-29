@@ -44,10 +44,10 @@ const MainContent = styled.main`
 
 const HomePage = () => (
   <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
-    <h1>ClimateInsight</h1>
+    <h1>WeatherMap Explorer</h1>
     <p>
-      Welcome to our climate data visualization platform. This application
-      allows you to explore various climate datasets through interactive maps
+      Welcome to our weather data visualization platform. This application
+      allows you to explore various weather datasets through interactive maps
       and visualizations.
     </p>
 
@@ -127,7 +127,7 @@ const App = () => {
         <AppContainer>
           <Header>
             <h1 style={{ fontSize: "1.5rem", margin: "0 0 0.5rem 0" }}>
-              ClimateInsight
+              WeatherMap Explorer
             </h1>
             <MainNav>
               <a href="/">Home</a>

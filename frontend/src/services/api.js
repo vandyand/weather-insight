@@ -40,9 +40,9 @@ export const weatherAPI = {
 
 // Datasets API calls
 export const datasetsAPI = {
-  getDatasets: () => api.get("/climate-data/datasets"),
-  getDataset: (id) => api.get(`/climate-data/dataset/${id}`),
-  getTimeSeries: (params) => api.post("/climate-data/time-series", params),
+  getDatasets: () => api.get("/weather-data/datasets"),
+  getDataset: (id) => api.get(`/weather-data/dataset/${id}`),
+  getTimeSeries: (params) => api.post("/weather-data/time-series", params),
 };
 
 export default api;

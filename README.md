@@ -1,12 +1,12 @@
-# ClimateInsight
+# Weather Map Explorer
 
-ClimateInsight is a full-stack React/Node.js application for visualizing climate data through interactive maps and time-series analysis. This project showcases skills in JavaScript/React programming, reactive UI development, and geospatial data processing.
+Weather Map Explorer is a full-stack React/Node.js application for visualizing weather data through interactive maps and time-series analysis. This project showcases skills in JavaScript/React programming, reactive UI development, and geospatial data processing.
 
 ## Features
 
-- **Interactive Maps**: Explore climate data spatially with interactive maps powered by Mapbox GL.
-- **Time Series Analysis**: Analyze trends over time with interactive charts showing historical climate data.
-- **Multiple Datasets**: Access various climate datasets including temperature, precipitation, sea level, and CO2 levels.
+- **Interactive Maps**: Explore weather data spatially with interactive maps powered by Leaflet JS.
+- **Time Series Analysis**: Analyze trends over time with interactive charts showing historical weather data.
+- **Multiple Datasets**: Access various weather datasets including temperature, precipitation, and wind patterns.
 - **Spatial Queries**: Perform location-based analysis with the Visual Crossing Weather API.
 
 ## Technology Stack
