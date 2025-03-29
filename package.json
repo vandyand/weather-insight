@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "./start-react-app.sh",
     "build": "cd frontend && npm run build",
-    "server": "node server.js"
+    "server": "node server.js",
+    "start": "node server.js",
+    "heroku-postbuild": "cd frontend && npm install && npm run build && npm run deploy"
+  },
+  "engines": {
+    "node": "16.x"
   },
   "keywords": [
     "weather",
