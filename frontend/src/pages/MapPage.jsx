@@ -188,73 +188,67 @@ const MapPage = () => {
   const renderCount = useRef(0);
   renderCount.current += 1;
 
-  // Add state for date range
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [dateRangeEnabled, setDateRangeEnabled] = useState(false);
+  // Modified date range state to remove toggle and set defaults
+  const today = new Date();
+  const futureDate = new Date();
+  futureDate.setDate(today.getDate() + 10);
+
+  const [startDate, setStartDate] = useState(today.toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState(
+    futureDate.toISOString().split("T")[0]
+  );
+  const [lastClickedPosition, setLastClickedPosition] = useState(null);
 
   // State to save panel size preferences
   const [mapPanelSize, setMapPanelSize] = useState(75); // Initial map takes 75% of space
 
-  // Log Mapbox token info on mount
+  // Add a ref to track if we're currently fetching data
+  const isFetchingRef = useRef(false);
+  const mapRef = useRef(null);
+
+  // Store lastClickedPosition in a ref for direct access
+  const lastClickedPositionRef = useRef(null);
+
+  // Store date values in refs to avoid stale closure issues
+  const startDateRef = useRef(startDate);
+  const endDateRef = useRef(endDate);
+
+  // Update the refs whenever the state changes
   useEffect(() => {
-    console.log("[MapPage] Component mounted with Mapbox token status:");
-    console.log("Token exists:", !!window.MAPBOX_TOKEN);
-    console.log("Token length:", window.MAPBOX_TOKEN?.length || 0);
-    console.log(
-      "Token first 10 chars:",
-      window.MAPBOX_TOKEN?.substring(0, 10) || "missing"
-    );
+    lastClickedPositionRef.current = lastClickedPosition;
+  }, [lastClickedPosition]);
 
-    // Check for dataset in URL params
-    const params = new URLSearchParams(location.search);
-    const datasetParam = params.get("dataset");
-    if (datasetParam) {
-      console.log(`[MapPage] Found dataset in URL: ${datasetParam}`);
-      setSelectedDataset(datasetParam);
-    }
-  }, [location.search, setSelectedDataset]);
-
-  // Sync internal state with context
   useEffect(() => {
-    renderCount.current += 1;
-    console.log(
-      `[MapPage] Render #${renderCount.current}, selectedDataset from context:`,
-      selectedDataset
-    );
+    startDateRef.current = startDate;
+    console.log(`[MapPage] Start date updated in ref: ${startDateRef.current}`);
+  }, [startDate]);
 
-    if (selectedDataset) {
-      console.log(
-        `[MapPage] Updating selectedDataset to match context:`,
-        selectedDataset
-      );
-      setSelectedDataset(selectedDataset);
-    }
-  }, [selectedDataset]);
-
-  // Initialize map when component mounts - keep for compatibility
-  const handleMapInit = useCallback((map) => {
-    console.log("[MapPage] Map initialized via whenCreated");
-    mapRef.current = map;
-    setMapInitialized(true);
-
-    // We're now using the MapEventHandler component instead
-    // But keeping this for debugging purposes
-    map.on("click", (e) => {
-      console.log(
-        "[MapPage] Direct map click detected via whenCreated handler"
-      );
-    });
-  }, []);
+  useEffect(() => {
+    endDateRef.current = endDate;
+    console.log(`[MapPage] End date updated in ref: ${endDateRef.current}`);
+  }, [endDate]);
 
   // Map click handler - wrapped in useCallback to prevent recreation on every render
   const handleMapClick = useCallback(
     async (e) => {
       console.log(`[MapPage] Map click handler called, coordinates:`, e.latlng);
 
+      // Set fetching flag to prevent loops
+      isFetchingRef.current = true;
+
       const { lat, lng } = e.latlng;
       console.log(`[MapPage] Processing click at coordinates: ${lat}, ${lng}`);
       setPosition({ lat, lng });
+
+      // Only update lastClickedPosition if this is a direct user click (not a refetch)
+      if (
+        !lastClickedPosition ||
+        lastClickedPosition.lat !== lat ||
+        lastClickedPosition.lng !== lng
+      ) {
+        setLastClickedPosition({ lat, lng });
+      }
+
       setError(null);
       setIsLoading(true);
 
@@ -274,49 +268,54 @@ const MapPage = () => {
           "feels-like",
         ];
 
+        // Get the current date values from refs instead of closure/state
+        // This ensures we always use the latest values
+        const currentStartDate = startDateRef.current;
+        const currentEndDate = endDateRef.current;
+
+        console.log(
+          `[MapPage] Using dates from refs: ${currentStartDate} to ${currentEndDate}`
+        );
+
         // Process date parameters with proper defaults
-        let effectiveStartDate = startDate;
-        let effectiveEndDate = endDate;
+        let effectiveStartDate = currentStartDate;
+        let effectiveEndDate = currentEndDate;
 
-        if (dateRangeEnabled) {
-          // Apply default date rules
-          if (effectiveStartDate && !effectiveEndDate) {
-            // If start date is provided but no end date, end date = start date + 15 days
-            const endDateObj = new Date(effectiveStartDate);
-            endDateObj.setDate(endDateObj.getDate() + 15);
-            effectiveEndDate = endDateObj.toISOString().split("T")[0];
-            console.log(
-              `[MapPage] No end date provided. Defaulting to start date + 15 days: ${effectiveEndDate}`
-            );
-          } else if (!effectiveStartDate && effectiveEndDate) {
-            // If end date is provided but no start date, start date = end date - 15 days
-            const startDateObj = new Date(effectiveEndDate);
-            startDateObj.setDate(startDateObj.getDate() - 15);
-            effectiveStartDate = startDateObj.toISOString().split("T")[0];
-            console.log(
-              `[MapPage] No start date provided. Defaulting to end date - 15 days: ${effectiveStartDate}`
-            );
-          } else if (!effectiveStartDate && !effectiveEndDate) {
-            // If neither is provided, use today and today + 10 days
-            const today = new Date();
-            const futureDate = new Date();
-            futureDate.setDate(futureDate.getDate() + 10);
+        // Apply default date rules (now always enabled since toggle is removed)
+        if (effectiveStartDate && !effectiveEndDate) {
+          // If start date is provided but no end date, end date = start date + 15 days
+          const endDateObj = new Date(effectiveStartDate);
+          endDateObj.setDate(endDateObj.getDate() + 15);
+          effectiveEndDate = endDateObj.toISOString().split("T")[0];
+          console.log(
+            `[MapPage] No end date provided. Defaulting to start date + 15 days: ${effectiveEndDate}`
+          );
+        } else if (!effectiveStartDate && effectiveEndDate) {
+          // If end date is provided but no start date, start date = end date - 15 days
+          const startDateObj = new Date(effectiveEndDate);
+          startDateObj.setDate(startDateObj.getDate() - 15);
+          effectiveStartDate = startDateObj.toISOString().split("T")[0];
+          console.log(
+            `[MapPage] No start date provided. Defaulting to end date - 15 days: ${effectiveStartDate}`
+          );
+        } else if (!effectiveStartDate && !effectiveEndDate) {
+          // If neither is provided, use today and today + 10 days
+          const today = new Date();
+          const futureDate = new Date();
+          futureDate.setDate(futureDate.getDate() + 10);
 
-            effectiveStartDate = today.toISOString().split("T")[0];
-            effectiveEndDate = futureDate.toISOString().split("T")[0];
-            console.log(
-              `[MapPage] No dates provided. Using today (${effectiveStartDate}) to today + 10 days (${effectiveEndDate})`
-            );
-          }
+          effectiveStartDate = today.toISOString().split("T")[0];
+          effectiveEndDate = futureDate.toISOString().split("T")[0];
+          console.log(
+            `[MapPage] No dates provided. Using today (${effectiveStartDate}) to today + 10 days (${effectiveEndDate})`
+          );
         }
 
-        // Add date range parameters if enabled
-        const dateParams = dateRangeEnabled
-          ? {
-              start_date: effectiveStartDate,
-              end_date: effectiveEndDate,
-            }
-          : {};
+        // Date parameters are always included (since toggle is removed)
+        const dateParams = {
+          start_date: effectiveStartDate,
+          end_date: effectiveEndDate,
+        };
 
         console.log(`[MapPage] Using date parameters:`, dateParams);
 
@@ -343,12 +342,10 @@ const MapPage = () => {
         const combinedData = {
           location: { lat, lng },
           timeSeriesData: [],
-          dateRange: dateRangeEnabled
-            ? {
-                startDate: effectiveStartDate,
-                endDate: effectiveEndDate,
-              }
-            : null,
+          dateRange: {
+            startDate: effectiveStartDate,
+            endDate: effectiveEndDate,
+          },
         };
 
         // First, create a map of timestamps
@@ -403,14 +400,77 @@ const MapPage = () => {
         });
         setProcessedData(combinedData);
         setIsLoading(false);
+        isFetchingRef.current = false; // Reset the fetching flag
       } catch (err) {
         console.error(`[MapPage] Error fetching data:`, err);
         setError(err.message || "Failed to fetch weather data");
         setIsLoading(false);
+        isFetchingRef.current = false; // Reset the fetching flag even on error
       }
     },
-    [fetchDatasetById, dateRangeEnabled, startDate, endDate]
+    // Remove startDate and endDate from dependency array to prevent stale closures
+    [fetchDatasetById, lastClickedPosition]
   );
+
+  // Effect to re-fetch data when dates change if a position has been clicked
+  useEffect(() => {
+    // Only fetch if we have a position and aren't already fetching
+    if (lastClickedPositionRef.current && !isFetchingRef.current) {
+      console.log(`[MapPage] Refetching data due to date change`);
+      handleMapClick({ latlng: lastClickedPositionRef.current });
+    }
+  }, [startDate, endDate, handleMapClick]);
+
+  // Log Mapbox token info on mount
+  useEffect(() => {
+    console.log("[MapPage] Component mounted with Mapbox token status:");
+    console.log("Token exists:", !!window.MAPBOX_TOKEN);
+    console.log("Token length:", window.MAPBOX_TOKEN?.length || 0);
+    console.log(
+      "Token first 10 chars:",
+      window.MAPBOX_TOKEN?.substring(0, 10) || "missing"
+    );
+
+    // Check for dataset in URL params
+    const params = new URLSearchParams(location.search);
+    const datasetParam = params.get("dataset");
+    if (datasetParam) {
+      console.log(`[MapPage] Found dataset in URL: ${datasetParam}`);
+      setSelectedDataset(datasetParam);
+    }
+  }, [location.search, setSelectedDataset]);
+
+  // Sync internal state with context
+  useEffect(() => {
+    renderCount.current += 1;
+    console.log(
+      `[MapPage] Render #${renderCount.current}, selectedDataset from context:`,
+      selectedDataset
+    );
+
+    if (selectedDataset) {
+      console.log(
+        `[MapPage] Updating selectedDataset to match context:`,
+        selectedDataset
+      );
+      setSelectedDataset(selectedDataset);
+    }
+  }, [selectedDataset]);
+
+  // Initialize map when component mounts - keep for compatibility
+  const handleMapInit = useCallback((map) => {
+    console.log("[MapPage] Map initialized via whenCreated");
+    mapRef.current = map;
+    setMapInitialized(true);
+
+    // We're now using the MapEventHandler component instead
+    // But keeping this for debugging purposes
+    map.on("click", (e) => {
+      console.log(
+        "[MapPage] Direct map click detected via whenCreated handler"
+      );
+    });
+  }, []);
 
   // Test function to manually trigger data fetch
   const testFetchData = () => {
@@ -425,6 +485,46 @@ const MapPage = () => {
 
     handleMapClick({ latlng: testLocation });
   };
+
+  // Function to validate date range and update if needed
+  const validateDateRange = useCallback((newStartDate, newEndDate) => {
+    // Create date objects
+    const startDateObj = new Date(newStartDate);
+    let endDateObj = new Date(newEndDate);
+
+    // Calculate maximum allowed end date (21 days from start date)
+    const maxEndDate = new Date(startDateObj);
+    maxEndDate.setDate(startDateObj.getDate() + 21);
+
+    // If end date is more than 21 days after start date, adjust it
+    if (endDateObj > maxEndDate) {
+      endDateObj = maxEndDate;
+      const formattedDate = endDateObj.toISOString().split("T")[0];
+      setEndDate(formattedDate);
+      return {
+        start: newStartDate,
+        end: formattedDate,
+        adjusted: true,
+      };
+    }
+
+    // If end date is before start date, set it to start date
+    if (endDateObj < startDateObj) {
+      const formattedDate = newStartDate;
+      setEndDate(formattedDate);
+      return {
+        start: newStartDate,
+        end: formattedDate,
+        adjusted: true,
+      };
+    }
+
+    return {
+      start: newStartDate,
+      end: newEndDate,
+      adjusted: false,
+    };
+  }, []);
 
   // Render chart for time series data
   const renderChart = () => {
@@ -678,18 +778,17 @@ const MapPage = () => {
     setMapPanelSize(sizes[0]);
   };
 
-  // Handle date range toggle
-  const handleDateRangeToggle = (e) => {
-    setDateRangeEnabled(e.target.checked);
-  };
-
-  // Handle date changes
+  // Handle date changes with validation
   const handleStartDateChange = (e) => {
-    setStartDate(e.target.value);
+    const newStartDate = e.target.value;
+    setStartDate(newStartDate);
+    validateDateRange(newStartDate, endDate);
   };
 
   const handleEndDateChange = (e) => {
-    setEndDate(e.target.value);
+    const newEndDate = e.target.value;
+    setEndDate(newEndDate);
+    validateDateRange(startDate, newEndDate);
   };
 
   // Function to get formatted date for min/max attributes
@@ -699,23 +798,23 @@ const MapPage = () => {
   };
 
   // Update the function to allow dates going back several years
-  const getThirtyDaysAgoFormatted = () => {
-    const date = new Date();
-    date.setDate(date.getDate() - 30);
-    return date.toISOString().split("T")[0];
-  };
-
-  // Add a function to get a date 10 years ago for extended historical data
   const getTenYearsAgoFormatted = () => {
     const date = new Date();
     date.setFullYear(date.getFullYear() - 10);
     return date.toISOString().split("T")[0];
   };
 
-  // Function to get formatted date 15 days in future for max attribute
-  const getFifteenDaysFutureFormatted = () => {
-    const date = new Date();
-    date.setDate(date.getDate() + 15);
+  // Function to get formatted date 21 days in future (max range) for max attribute
+  const getMaxEndDateFormatted = () => {
+    if (!startDate) {
+      const date = new Date();
+      date.setDate(date.getDate() + 21);
+      return date.toISOString().split("T")[0];
+    }
+
+    const startDateObj = new Date(startDate);
+    const date = new Date(startDateObj);
+    date.setDate(date.getDate() + 21);
     return date.toISOString().split("T")[0];
   };
 
@@ -751,49 +850,39 @@ const MapPage = () => {
               )}
             </Col>
             <Col md={6}>
-              {/* Add date range controls */}
+              {/* Modified date range controls without toggle */}
               <Form>
-                <Form.Check
-                  type="switch"
-                  id="date-range-toggle"
-                  label="Custom Date Range"
-                  checked={dateRangeEnabled}
-                  onChange={handleDateRangeToggle}
-                  className="mb-2"
-                />
-
-                {dateRangeEnabled && (
-                  <>
-                    <Row>
-                      <Col xs={6}>
-                        <Form.Group className="mb-0">
-                          <Form.Label className="small">Start Date</Form.Label>
-                          <Form.Control
-                            type="date"
-                            size="sm"
-                            value={startDate}
-                            onChange={handleStartDateChange}
-                            min={getTenYearsAgoFormatted()}
-                            max={getTodayFormatted()}
-                          />
-                        </Form.Group>
-                      </Col>
-                      <Col xs={6}>
-                        <Form.Group className="mb-0">
-                          <Form.Label className="small">End Date</Form.Label>
-                          <Form.Control
-                            type="date"
-                            size="sm"
-                            value={endDate}
-                            onChange={handleEndDateChange}
-                            min={startDate || getTenYearsAgoFormatted()}
-                            max={getFifteenDaysFutureFormatted()}
-                          />
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  </>
-                )}
+                <Row>
+                  <Col xs={6}>
+                    <Form.Group className="mb-0">
+                      <Form.Label className="small">Start Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        size="sm"
+                        value={startDate}
+                        onChange={handleStartDateChange}
+                        min={getTenYearsAgoFormatted()}
+                        max={getTodayFormatted()}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={6}>
+                    <Form.Group className="mb-0">
+                      <Form.Label className="small">End Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        size="sm"
+                        value={endDate}
+                        onChange={handleEndDateChange}
+                        min={startDate || getTenYearsAgoFormatted()}
+                        max={getMaxEndDateFormatted()}
+                      />
+                      <small className="text-muted">
+                        Max 21 days from start date
+                      </small>
+                    </Form.Group>
+                  </Col>
+                </Row>
               </Form>
             </Col>
             <Col md={3} className="text-end">

@@ -53,25 +53,41 @@ export const DatasetProvider = ({ children }) => {
             location
           );
 
-          // Handle date parameters with the same defaulting logic as in MapPage
+          // Handle date parameters with validation for maximum range (21 days)
           let startDate, endDate;
 
-          if (location.start_date && !location.end_date) {
-            // If start date is provided but no end date, end date = start date + 15 days
+          if (location.start_date && location.end_date) {
+            // Both dates provided - validate the range
+            startDate = location.start_date;
+            endDate = location.end_date;
+
+            // Check if the range exceeds 21 days
+            const startDateObj = new Date(startDate);
+            const endDateObj = new Date(endDate);
+            const daysDiff = Math.ceil(
+              (endDateObj - startDateObj) / (1000 * 60 * 60 * 24)
+            );
+
+            if (daysDiff > 21) {
+              console.warn(
+                `Date range exceeds maximum allowed (21 days). Adjusting end date.`
+              );
+              const maxEndDate = new Date(startDateObj);
+              maxEndDate.setDate(startDateObj.getDate() + 21);
+              endDate = maxEndDate.toISOString().split("T")[0];
+            }
+          } else if (location.start_date && !location.end_date) {
+            // If start date is provided but no end date, end date = start date + 10 days
             startDate = location.start_date;
             const endDateObj = new Date(startDate);
-            endDateObj.setDate(endDateObj.getDate() + 15);
+            endDateObj.setDate(endDateObj.getDate() + 10);
             endDate = endDateObj.toISOString().split("T")[0];
           } else if (!location.start_date && location.end_date) {
-            // If end date is provided but no start date, start date = end date - 15 days
+            // If end date is provided but no start date, start date = end date - 10 days
             endDate = location.end_date;
             const startDateObj = new Date(endDate);
-            startDateObj.setDate(startDateObj.getDate() - 15);
+            startDateObj.setDate(startDateObj.getDate() - 10);
             startDate = startDateObj.toISOString().split("T")[0];
-          } else if (location.start_date && location.end_date) {
-            // Both dates provided
-            startDate = location.start_date;
-            endDate = location.end_date;
           } else {
             // Default date range (neither provided): today to 10 days from now
             const today = new Date();
