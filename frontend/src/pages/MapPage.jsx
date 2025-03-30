@@ -188,14 +188,10 @@ const MapPage = () => {
   const renderCount = useRef(0);
   renderCount.current += 1;
 
-  // Modified date range state to remove toggle and set defaults
+  // Modified date selection to use a single reference date
   const today = new Date();
-  const futureDate = new Date();
-  futureDate.setDate(today.getDate() + 10);
-
-  const [startDate, setStartDate] = useState(today.toISOString().split("T")[0]);
-  const [endDate, setEndDate] = useState(
-    futureDate.toISOString().split("T")[0]
+  const [selectedDate, setSelectedDate] = useState(
+    today.toISOString().split("T")[0]
   );
   const [lastClickedPosition, setLastClickedPosition] = useState(null);
 
@@ -209,9 +205,8 @@ const MapPage = () => {
   // Store lastClickedPosition in a ref for direct access
   const lastClickedPositionRef = useRef(null);
 
-  // Store date values in refs to avoid stale closure issues
-  const startDateRef = useRef(startDate);
-  const endDateRef = useRef(endDate);
+  // Store date value in ref to avoid stale closure issues
+  const selectedDateRef = useRef(selectedDate);
 
   // Update the refs whenever the state changes
   useEffect(() => {
@@ -219,14 +214,11 @@ const MapPage = () => {
   }, [lastClickedPosition]);
 
   useEffect(() => {
-    startDateRef.current = startDate;
-    console.log(`[MapPage] Start date updated in ref: ${startDateRef.current}`);
-  }, [startDate]);
-
-  useEffect(() => {
-    endDateRef.current = endDate;
-    console.log(`[MapPage] End date updated in ref: ${endDateRef.current}`);
-  }, [endDate]);
+    selectedDateRef.current = selectedDate;
+    console.log(
+      `[MapPage] Selected date updated in ref: ${selectedDateRef.current}`
+    );
+  }, [selectedDate]);
 
   // Map click handler - wrapped in useCallback to prevent recreation on every render
   const handleMapClick = useCallback(
@@ -268,50 +260,29 @@ const MapPage = () => {
           "feels-like",
         ];
 
-        // Get the current date values from refs instead of closure/state
-        // This ensures we always use the latest values
-        const currentStartDate = startDateRef.current;
-        const currentEndDate = endDateRef.current;
+        // Get the current date value from ref
+        const currentDate = selectedDateRef.current;
+        console.log(`[MapPage] Using selected date from ref: ${currentDate}`);
+
+        // Calculate exact ±3 days from reference date
+        const dateObj = new Date(currentDate);
+
+        // Create new date objects to avoid modifying the original
+        const startDateObj = new Date(dateObj);
+        startDateObj.setDate(dateObj.getDate() - 3);
+
+        const endDateObj = new Date(dateObj);
+        endDateObj.setDate(dateObj.getDate() + 3);
+
+        // Format dates as ISO strings (YYYY-MM-DD)
+        const effectiveStartDate = startDateObj.toISOString().split("T")[0];
+        const effectiveEndDate = endDateObj.toISOString().split("T")[0];
 
         console.log(
-          `[MapPage] Using dates from refs: ${currentStartDate} to ${currentEndDate}`
+          `[MapPage] Calculated exact ±3 day window: ${effectiveStartDate} to ${effectiveEndDate}`
         );
 
-        // Process date parameters with proper defaults
-        let effectiveStartDate = currentStartDate;
-        let effectiveEndDate = currentEndDate;
-
-        // Apply default date rules (now always enabled since toggle is removed)
-        if (effectiveStartDate && !effectiveEndDate) {
-          // If start date is provided but no end date, end date = start date + 15 days
-          const endDateObj = new Date(effectiveStartDate);
-          endDateObj.setDate(endDateObj.getDate() + 15);
-          effectiveEndDate = endDateObj.toISOString().split("T")[0];
-          console.log(
-            `[MapPage] No end date provided. Defaulting to start date + 15 days: ${effectiveEndDate}`
-          );
-        } else if (!effectiveStartDate && effectiveEndDate) {
-          // If end date is provided but no start date, start date = end date - 15 days
-          const startDateObj = new Date(effectiveEndDate);
-          startDateObj.setDate(startDateObj.getDate() - 15);
-          effectiveStartDate = startDateObj.toISOString().split("T")[0];
-          console.log(
-            `[MapPage] No start date provided. Defaulting to end date - 15 days: ${effectiveStartDate}`
-          );
-        } else if (!effectiveStartDate && !effectiveEndDate) {
-          // If neither is provided, use today and today + 10 days
-          const today = new Date();
-          const futureDate = new Date();
-          futureDate.setDate(futureDate.getDate() + 10);
-
-          effectiveStartDate = today.toISOString().split("T")[0];
-          effectiveEndDate = futureDate.toISOString().split("T")[0];
-          console.log(
-            `[MapPage] No dates provided. Using today (${effectiveStartDate}) to today + 10 days (${effectiveEndDate})`
-          );
-        }
-
-        // Date parameters are always included (since toggle is removed)
+        // Date parameters
         const dateParams = {
           start_date: effectiveStartDate,
           end_date: effectiveEndDate,
@@ -345,6 +316,7 @@ const MapPage = () => {
           dateRange: {
             startDate: effectiveStartDate,
             endDate: effectiveEndDate,
+            centerDate: currentDate,
           },
         };
 
@@ -419,7 +391,7 @@ const MapPage = () => {
       console.log(`[MapPage] Refetching data due to date change`);
       handleMapClick({ latlng: lastClickedPositionRef.current });
     }
-  }, [startDate, endDate, handleMapClick]);
+  }, [selectedDate, handleMapClick]);
 
   // Log Mapbox token info on mount
   useEffect(() => {
@@ -438,6 +410,26 @@ const MapPage = () => {
       console.log(`[MapPage] Found dataset in URL: ${datasetParam}`);
       setSelectedDataset(datasetParam);
     }
+
+    // Auto-fetch data on page load for default location
+    const defaultLocation = {
+      lat: 51.505,
+      lng: -0.09,
+    };
+
+    console.log(
+      "[MapPage] Auto-fetching data for default location on page load",
+      defaultLocation
+    );
+    setPosition(defaultLocation);
+    setLastClickedPosition(defaultLocation);
+
+    // Use a small timeout to ensure the component is fully mounted
+    setTimeout(() => {
+      if (!isFetchingRef.current) {
+        handleMapClick({ latlng: defaultLocation });
+      }
+    }, 500);
   }, [location.search, setSelectedDataset]);
 
   // Sync internal state with context
@@ -486,45 +478,31 @@ const MapPage = () => {
     handleMapClick({ latlng: testLocation });
   };
 
-  // Function to validate date range and update if needed
-  const validateDateRange = useCallback((newStartDate, newEndDate) => {
-    // Create date objects
-    const startDateObj = new Date(newStartDate);
-    let endDateObj = new Date(newEndDate);
+  // Handle date change
+  const handleDateChange = (e) => {
+    const newDate = e.target.value;
+    setSelectedDate(newDate);
+  };
 
-    // Calculate maximum allowed end date (21 days from start date)
-    const maxEndDate = new Date(startDateObj);
-    maxEndDate.setDate(startDateObj.getDate() + 21);
+  // Function to get formatted date for min/max attributes
+  const getTodayFormatted = () => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  };
 
-    // If end date is more than 21 days after start date, adjust it
-    if (endDateObj > maxEndDate) {
-      endDateObj = maxEndDate;
-      const formattedDate = endDateObj.toISOString().split("T")[0];
-      setEndDate(formattedDate);
-      return {
-        start: newStartDate,
-        end: formattedDate,
-        adjusted: true,
-      };
-    }
+  // Update the function to allow dates going back several years
+  const getTenYearsAgoFormatted = () => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 10);
+    return date.toISOString().split("T")[0];
+  };
 
-    // If end date is before start date, set it to start date
-    if (endDateObj < startDateObj) {
-      const formattedDate = newStartDate;
-      setEndDate(formattedDate);
-      return {
-        start: newStartDate,
-        end: formattedDate,
-        adjusted: true,
-      };
-    }
-
-    return {
-      start: newStartDate,
-      end: newEndDate,
-      adjusted: false,
-    };
-  }, []);
+  // Function to get max date (30 days in future)
+  const getMaxDateFormatted = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date.toISOString().split("T")[0];
+  };
 
   // Render chart for time series data
   const renderChart = () => {
@@ -711,11 +689,23 @@ const MapPage = () => {
       (key) => key !== "timestamp"
     );
 
-    // Format the date for better readability
-    const formattedData = timeSeriesData.map((point) => ({
-      ...point,
-      formattedDate: new Date(point.timestamp).toLocaleDateString(),
-    }));
+    // Format the date for better readability, ensuring correct date interpretation
+    const formattedData = timeSeriesData.map((point) => {
+      // Parse the date parts directly to avoid timezone issues
+      const [year, month, day] = point.timestamp.split("-").map(Number);
+      // Create date ensuring it stays on the correct day (month is 0-indexed in JS Date)
+      const date = new Date(year, month - 1, day);
+
+      // Format as mm/dd/yyyy with proper zero-padding
+      const formattedMonth = String(month).padStart(2, "0");
+      const formattedDay = String(day).padStart(2, "0");
+      const formattedDate = `${formattedMonth}/${formattedDay}/${year}`;
+
+      return {
+        ...point,
+        formattedDate: formattedDate,
+      };
+    });
 
     return (
       <div className="mt-4">
@@ -778,46 +768,6 @@ const MapPage = () => {
     setMapPanelSize(sizes[0]);
   };
 
-  // Handle date changes with validation
-  const handleStartDateChange = (e) => {
-    const newStartDate = e.target.value;
-    setStartDate(newStartDate);
-    validateDateRange(newStartDate, endDate);
-  };
-
-  const handleEndDateChange = (e) => {
-    const newEndDate = e.target.value;
-    setEndDate(newEndDate);
-    validateDateRange(startDate, newEndDate);
-  };
-
-  // Function to get formatted date for min/max attributes
-  const getTodayFormatted = () => {
-    const today = new Date();
-    return today.toISOString().split("T")[0];
-  };
-
-  // Update the function to allow dates going back several years
-  const getTenYearsAgoFormatted = () => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() - 10);
-    return date.toISOString().split("T")[0];
-  };
-
-  // Function to get formatted date 21 days in future (max range) for max attribute
-  const getMaxEndDateFormatted = () => {
-    if (!startDate) {
-      const date = new Date();
-      date.setDate(date.getDate() + 21);
-      return date.toISOString().split("T")[0];
-    }
-
-    const startDateObj = new Date(startDate);
-    const date = new Date(startDateObj);
-    date.setDate(date.getDate() + 21);
-    return date.toISOString().split("T")[0];
-  };
-
   return (
     <MapPageContainer>
       {/* Debug information */}
@@ -850,39 +800,28 @@ const MapPage = () => {
               )}
             </Col>
             <Col md={6}>
-              {/* Modified date range controls without toggle */}
+              {/* Single date control */}
               <Form>
-                <Row>
-                  <Col xs={6}>
+                <div className="d-flex align-items-center">
+                  <div className="me-3" style={{ width: "200px" }}>
                     <Form.Group className="mb-0">
-                      <Form.Label className="small">Start Date</Form.Label>
+                      <Form.Label className="small">Reference Date</Form.Label>
                       <Form.Control
                         type="date"
                         size="sm"
-                        value={startDate}
-                        onChange={handleStartDateChange}
+                        value={selectedDate}
+                        onChange={handleDateChange}
                         min={getTenYearsAgoFormatted()}
-                        max={getTodayFormatted()}
+                        max={getMaxDateFormatted()}
                       />
                     </Form.Group>
-                  </Col>
-                  <Col xs={6}>
-                    <Form.Group className="mb-0">
-                      <Form.Label className="small">End Date</Form.Label>
-                      <Form.Control
-                        type="date"
-                        size="sm"
-                        value={endDate}
-                        onChange={handleEndDateChange}
-                        min={startDate || getTenYearsAgoFormatted()}
-                        max={getMaxEndDateFormatted()}
-                      />
-                      <small className="text-muted">
-                        Max 21 days from start date
-                      </small>
-                    </Form.Group>
-                  </Col>
-                </Row>
+                  </div>
+                  <div className="small text-muted">
+                    <p className="mb-0">
+                      Data will show ±3 days from this date
+                    </p>
+                  </div>
+                </div>
               </Form>
             </Col>
             <Col md={3} className="text-end">

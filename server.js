@@ -421,63 +421,77 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Handle time-series data requests
-    if (
-      (req.url === "/api/weather-data/time-series" ||
-        req.url === "/api/weather-data/time-series/") &&
-      req.method === "POST"
-    ) {
-      console.log("Time-series endpoint hit!");
+    if (req.url.startsWith("/api/weather-data/time-series")) {
+      // Only POST method is allowed for this endpoint
+      if (req.method !== "POST") {
+        res.writeHead(405);
+        res.end(
+          JSON.stringify({
+            error: "Method not allowed. Use POST",
+          })
+        );
+        return;
+      }
+
       try {
-        const data = await parseJsonBody(req);
-        console.log(
-          "Time series request received with data:",
-          JSON.stringify(data, null, 2)
-        );
+        const body = await parseJsonBody(req);
+        const { dataset_id, lat, lon, start_date, end_date } = body;
 
-        const { dataset_id, lat, lon, start_date, end_date } = data;
-        console.log(
-          `Extracted values: dataset_id=${dataset_id}, lat=${lat}, lon=${lon}, start_date=${start_date}, end_date=${end_date}`
-        );
-
-        if (
-          !dataset_id ||
-          lat === undefined ||
-          lon === undefined ||
-          !start_date ||
-          !end_date
-        ) {
+        if (!dataset_id || !lat || !lon) {
           res.writeHead(400);
           res.end(
             JSON.stringify({
-              error:
-                "Missing required parameters: dataset_id, lat, lon, start_date, end_date",
+              error: "Missing required parameters: dataset_id, lat, lon",
             })
           );
           return;
         }
 
-        // Create location string from lat,lon coordinates
-        const location = `${lat},${lon}`;
         console.log(
-          `Fetching real weather data for ${location} from ${start_date} to ${end_date}`
+          `Processing time series request for dataset: ${dataset_id}, location: ${lat},${lon}, date range: ${start_date} to ${end_date}`
         );
 
+        // Attempt to get real weather data from Visual Crossing API
         try {
-          // Get real weather data from Visual Crossing
-          const weatherData = await getWeatherData(
-            location,
-            start_date,
-            end_date
-          );
-
-          // Process the data based on dataset type
-          const timeSeriesData = processWeatherDataByDatasetType(
-            weatherData,
-            dataset_id
-          );
+          // Ensure we have valid dates
+          const requestStartDate =
+            start_date || new Date().toISOString().split("T")[0];
+          const requestEndDate =
+            end_date ||
+            (() => {
+              const date = new Date();
+              date.setDate(date.getDate() + 7);
+              return date.toISOString().split("T")[0];
+            })();
 
           console.log(
-            `Successfully processed ${timeSeriesData.length} data points`
+            `Requesting data from Visual Crossing for date range: ${requestStartDate} to ${requestEndDate}`
+          );
+
+          // Verify we have a valid API key
+          if (!VISUAL_CROSSING_API_KEY) {
+            throw new Error(
+              "Missing Visual Crossing API key in environment variables"
+            );
+          }
+
+          const location = `${lat},${lon}`;
+          const weatherData = await getWeatherData(
+            location,
+            requestStartDate,
+            requestEndDate
+          );
+
+          if (!weatherData) {
+            throw new Error("No data received from Visual Crossing API");
+          }
+
+          // Process the weather data based on the dataset type
+          const timeSeriesData = processWeatherDataByDatasetType(
+            weatherData,
+            dataset_id,
+            requestStartDate,
+            requestEndDate
           );
 
           // Return the processed data
@@ -491,10 +505,9 @@ const server = http.createServer(async (req, res) => {
             })
           );
         } catch (error) {
-          console.error("Error fetching real weather data:", error.message);
-          console.log("Falling back to mock data");
+          console.error("Error fetching weather data:", error);
 
-          // Log helpful diagnostics
+          // If the API call failed, generate mock data
           if (
             error.message.includes("quota") ||
             error.message.includes("exceeded")
@@ -631,7 +644,12 @@ server.listen(PORT, () => {
 });
 
 // Function to process Visual Crossing weather data based on dataset type
-function processWeatherDataByDatasetType(weatherData, datasetId) {
+function processWeatherDataByDatasetType(
+  weatherData,
+  datasetId,
+  startDate,
+  endDate
+) {
   console.log(`Processing ${datasetId} data from Visual Crossing API`);
 
   if (!weatherData || !weatherData.days || !Array.isArray(weatherData.days)) {
@@ -639,55 +657,85 @@ function processWeatherDataByDatasetType(weatherData, datasetId) {
     return [];
   }
 
-  // Map the days data to our format based on the dataset type
-  return weatherData.days.map((day) => {
-    const timestamp = day.datetime;
-    let value;
+  // Calculate the full range of dates we should have
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const expectedDates = [];
 
-    switch (datasetId) {
-      case "temperature":
-        value = day.temp; // Average temperature for the day
-        break;
-      case "temperature-high":
-        value = day.tempmax; // Maximum temperature
-        break;
-      case "temperature-low":
-        value = day.tempmin; // Minimum temperature
-        break;
-      case "temperature-historical":
-        value = day.temp; // Same as temperature for historical data
-        break;
-      case "feels-like":
-        value = day.feelslike; // Feels like temperature
-        break;
-      case "precipitation":
-        value = day.precip; // Precipitation amount
-        break;
-      case "humidity":
-        value = day.humidity; // Humidity percentage
-        break;
-      case "wind-speed":
-        value = day.windspeed; // Wind speed
-        break;
-      case "uv-index":
-        value = day.uvindex; // UV index
-        break;
-      case "cloud-cover":
-        value = day.cloudcover; // Cloud cover percentage
-        break;
-      default:
-        // Default to temperature if dataset is not recognized
-        console.warn(
-          `Unknown dataset type: ${datasetId}, defaulting to temperature`
-        );
-        value = day.temp;
-    }
+  // Generate an array of all dates in the range (inclusive of both start and end)
+  const currentDate = new Date(start);
+  while (currentDate <= end) {
+    expectedDates.push(currentDate.toISOString().split("T")[0]);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
 
-    return {
-      timestamp,
-      value,
-    };
+  console.log(`Expecting data for dates: ${expectedDates.join(", ")}`);
+
+  // Create a map of the data we received
+  const receivedDataMap = {};
+  weatherData.days.forEach((day) => {
+    receivedDataMap[day.datetime] = day;
   });
+
+  // Map the days data to our format based on the dataset type
+  // Ensuring we include every date in the expected range
+  return expectedDates
+    .map((date) => {
+      // If we have data for this date, use it
+      const day = receivedDataMap[date];
+      let value = null;
+
+      if (day) {
+        switch (datasetId) {
+          case "temperature":
+            value = day.temp; // Average temperature for the day
+            break;
+          case "temperature-high":
+            value = day.tempmax; // Maximum temperature
+            break;
+          case "temperature-low":
+            value = day.tempmin; // Minimum temperature
+            break;
+          case "temperature-historical":
+            value = day.temp; // Same as temperature for historical data
+            break;
+          case "feels-like":
+            value = day.feelslike; // Feels like temperature
+            break;
+          case "precipitation":
+            value = day.precip; // Precipitation amount
+            break;
+          case "humidity":
+            value = day.humidity; // Humidity percentage
+            break;
+          case "wind-speed":
+            value = day.windspeed; // Wind speed
+            break;
+          case "uv-index":
+            value = day.uvindex; // UV index
+            break;
+          case "cloud-cover":
+            value = day.cloudcover; // Cloud cover percentage
+            break;
+          default:
+            // Default to temperature if dataset is not recognized
+            console.warn(
+              `Unknown dataset type: ${datasetId}, defaulting to temperature`
+            );
+            value = day.temp;
+        }
+      } else {
+        console.warn(`Missing data for date: ${date}, will interpolate`);
+        // For missing dates, we could interpolate or generate a value
+        // For now, we'll just use null to indicate missing data
+      }
+
+      return {
+        timestamp: date,
+        value,
+      };
+    })
+    .filter((point) => point.value !== null); // Remove points with null values
 }
 
 // Helper function to generate mock time series data
@@ -696,14 +744,16 @@ function generateTimeSeriesData(datasetId, lat, lon, startDate, endDate) {
     `Generating mock time series data for dataset ${datasetId} at ${lat},${lon}`
   );
 
-  const mockData = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
   const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-  const numPoints = Math.min(daysDiff, 7); // Limit to 7 days of data for simplicity
+  // Ensure we generate data for the entire requested range, not just 7 days
+  const numPoints = daysDiff + 1; // Add 1 to include the end date
 
   // Generate different base values based on the dataset type
   const baseValue = getBaseValueForDataset(datasetId, lat);
+
+  const mockData = [];
 
   for (let i = 0; i < numPoints; i++) {
     const date = new Date(start);
