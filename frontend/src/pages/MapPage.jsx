@@ -121,6 +121,74 @@ const NoSelection = styled.div`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
+// Styling for the unit toggle
+const UnitToggleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 6px 8px;
+  border: 1px solid #dee2e6;
+  justify-content: space-between;
+`;
+
+const UnitToggleLabel = styled.span`
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+  margin-right: 8px;
+`;
+
+const ToggleSwitch = styled(Form.Check)`
+  .form-check-input {
+    height: 1.25rem;
+    width: 2.5rem;
+    cursor: pointer;
+
+    &:checked {
+      background-color: #0d6efd;
+      border-color: #0d6efd;
+    }
+  }
+`;
+
+// Style for date control container
+const DateControlContainer = styled.div`
+  display: flex;
+  align-items: center;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px 15px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+`;
+
+const DateLabel = styled.label`
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 5px;
+`;
+
+const DateInput = styled(Form.Control)`
+  border-radius: 6px;
+  border: 1px solid #ced4da;
+  padding: 0.375rem 0.75rem;
+
+  &:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+`;
+
+const DateHelpText = styled.p`
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-left: 15px;
+  margin-bottom: 0;
+`;
+
 // Component to handle map click events
 // This is a better approach than using whenCreated
 const MapEventHandler = ({ onMapClick }) => {
@@ -160,6 +228,32 @@ const MapEventHandler = ({ onMapClick }) => {
   return null; // This component doesn't render anything
 };
 
+const LoadingIndicator = styled.span`
+  display: inline-flex;
+  align-items: center;
+  color: #6c757d;
+  font-size: 0.875rem;
+  margin-left: 10px;
+
+  &::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border: 2px solid #dee2e6;
+    border-top-color: #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
 const MapPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -183,6 +277,8 @@ const MapPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [mapInitialized, setMapInitialized] = useState(false);
+  // Add state for unit preference
+  const [useStandardUnits, setUseStandardUnits] = useState(true);
 
   // Rendering counter for debugging
   const renderCount = useRef(0);
@@ -337,6 +433,11 @@ const MapPage = () => {
 
               // Add this dataset's value to the timestamp entry
               timestampMap[point.timestamp][datasetId] = point.value;
+              // Add the standard value if available
+              if (point.standardValue !== undefined) {
+                timestampMap[point.timestamp][`${datasetId}_standard`] =
+                  point.standardValue;
+              }
             });
           }
         });
@@ -560,6 +661,12 @@ const MapPage = () => {
           const value = point[datasetType];
           return [timestamp, typeof value === "number" ? value : null];
         }),
+        // Store standard values for tooltips
+        _originalStandard: timeSeriesData.map((point) => {
+          const timestamp = new Date(point.timestamp).getTime();
+          const value = point[`${datasetType}_standard`];
+          return [timestamp, typeof value === "number" ? value : null];
+        }),
       };
     });
 
@@ -604,23 +711,19 @@ const MapPage = () => {
         intersect: false,
         y: {
           formatter: function (value, { seriesIndex, dataPointIndex, w }) {
-            // Get the original value from our stored data
+            // Get the original value from our stored data based on unit preference
             const originalValue =
-              w.config.series[seriesIndex]._original[dataPointIndex][1];
+              useStandardUnits && w.config.series[seriesIndex]._originalStandard
+                ? w.config.series[seriesIndex]._originalStandard[
+                    dataPointIndex
+                  ][1]
+                : w.config.series[seriesIndex]._original[dataPointIndex][1];
 
             // More robust check for missing data - only if it's strictly null or undefined
             // Should handle zero values (0.00) correctly
             if (originalValue === null || originalValue === undefined) {
               return "N/A";
             }
-
-            // For debugging - enable this to check the actual value type in browser console
-            // console.log(`Value for ${w.config.series[seriesIndex].name}:`, {
-            //   value: originalValue,
-            //   type: typeof originalValue,
-            //   isZero: originalValue === 0,
-            //   equalsZeroString: originalValue == "0"
-            // });
 
             const datasetType = datasetTypes[seriesIndex];
             // Ensure we're formatting a number
@@ -638,9 +741,27 @@ const MapPage = () => {
           const datasetType = datasetTypes[opts.seriesIndex];
           const minMax = minMaxValues[datasetType];
           if (minMax) {
-            return `${seriesName} (${minMax.min.toFixed(
+            // Calculate min-max values in the current unit system
+            let minValue = minMax.min;
+            let maxValue = minMax.max;
+
+            // If using standard units, convert the min-max values
+            if (useStandardUnits) {
+              const datasetPrefix = `${datasetType}_standard`;
+              // Find values in standard units if available
+              const standardValues = timeSeriesData
+                .map((point) => point[datasetPrefix])
+                .filter((value) => value !== undefined);
+
+              if (standardValues.length > 0) {
+                minValue = Math.min(...standardValues);
+                maxValue = Math.max(...standardValues);
+              }
+            }
+
+            return `${seriesName} (${minValue.toFixed(1)}-${maxValue.toFixed(
               1
-            )}-${minMax.max.toFixed(1)} ${getUnitByDatasetId(datasetType)})`;
+            )} ${getUnitByDatasetId(datasetType)})`;
           }
           return `${seriesName} (${getUnitByDatasetId(datasetType)})`;
         },
@@ -727,13 +848,20 @@ const MapPage = () => {
               {formattedData.map((point, index) => (
                 <tr key={index}>
                   <td>{point.formattedDate}</td>
-                  {datasetTypes.map((datasetType) => (
-                    <td key={datasetType}>
-                      {point[datasetType] !== undefined
-                        ? point[datasetType].toFixed(2)
-                        : "N/A"}
-                    </td>
-                  ))}
+                  {datasetTypes.map((datasetType) => {
+                    // Get the appropriate value based on unit preference
+                    const value =
+                      useStandardUnits &&
+                      point[`${datasetType}_standard`] !== undefined
+                        ? point[`${datasetType}_standard`]
+                        : point[datasetType];
+
+                    return (
+                      <td key={datasetType}>
+                        {value !== undefined ? value.toFixed(2) : "N/A"}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -745,21 +873,42 @@ const MapPage = () => {
 
   // Helper function to get the appropriate unit based on dataset ID
   const getUnitByDatasetId = (datasetId) => {
-    switch (datasetId) {
-      case "temperature":
-      case "feels-like":
-        return "°C";
-      case "precipitation":
-        return "mm";
-      case "humidity":
-      case "cloud-cover":
-        return "%";
-      case "wind-speed":
-        return "km/h";
-      case "uv-index":
-        return "";
-      default:
-        return "";
+    if (useStandardUnits) {
+      // Return standard/imperial units
+      switch (datasetId) {
+        case "temperature":
+        case "feels-like":
+          return "°F";
+        case "precipitation":
+          return "in";
+        case "humidity":
+        case "cloud-cover":
+          return "%";
+        case "wind-speed":
+          return "mph";
+        case "uv-index":
+          return "";
+        default:
+          return "";
+      }
+    } else {
+      // Return metric units
+      switch (datasetId) {
+        case "temperature":
+        case "feels-like":
+          return "°C";
+        case "precipitation":
+          return "mm";
+        case "humidity":
+        case "cloud-cover":
+          return "%";
+        case "wind-speed":
+          return "km/h";
+        case "uv-index":
+          return "";
+        default:
+          return "";
+      }
     }
   };
 
@@ -767,6 +916,20 @@ const MapPage = () => {
   const handlePanelResize = (sizes) => {
     setMapPanelSize(sizes[0]);
   };
+
+  const MapTitle = styled.h5`
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+
+    &::before {
+      content: "🌦️";
+      margin-right: 8px;
+    }
+  `;
 
   return (
     <MapPageContainer>
@@ -792,41 +955,49 @@ const MapPage = () => {
         <Container>
           <Row className="align-items-center">
             <Col md={3}>
-              <h5 className="mb-0">Weather Explorer Map</h5>
+              <MapTitle>Weather Explorer Map</MapTitle>
               {isLoading && (
-                <span className="text-muted ml-2">
-                  <small>Loading...</small>
-                </span>
+                <LoadingIndicator>Loading data...</LoadingIndicator>
               )}
             </Col>
             <Col md={6}>
-              {/* Single date control */}
-              <Form>
-                <div className="d-flex align-items-center">
-                  <div className="me-3" style={{ width: "200px" }}>
-                    <Form.Group className="mb-0">
-                      <Form.Label className="small">Reference Date</Form.Label>
-                      <Form.Control
-                        type="date"
-                        size="sm"
-                        value={selectedDate}
-                        onChange={handleDateChange}
-                        min={getTenYearsAgoFormatted()}
-                        max={getMaxDateFormatted()}
-                      />
-                    </Form.Group>
-                  </div>
-                  <div className="small text-muted">
-                    <p className="mb-0">
-                      Data will show ±3 days from this date
-                    </p>
-                  </div>
+              <DateControlContainer>
+                <div style={{ width: "180px" }}>
+                  <DateLabel>Reference Date</DateLabel>
+                  <DateInput
+                    type="date"
+                    size="sm"
+                    value={selectedDate}
+                    onChange={handleDateChange}
+                    min={getTenYearsAgoFormatted()}
+                    max={getMaxDateFormatted()}
+                  />
                 </div>
-              </Form>
+                <DateHelpText>
+                  Data will show ±3 days from this date
+                </DateHelpText>
+              </DateControlContainer>
             </Col>
-            <Col md={3} className="text-end">
+            <Col
+              md={3}
+              className="text-end d-flex flex-column justify-content-center"
+            >
+              <UnitToggleContainer>
+                <UnitToggleLabel>
+                  {useStandardUnits ? "°F, mph, in" : "°C, km/h, mm"}
+                </UnitToggleLabel>
+                <ToggleSwitch
+                  type="switch"
+                  id="unit-toggle"
+                  checked={useStandardUnits}
+                  onChange={() => setUseStandardUnits(!useStandardUnits)}
+                  label={useStandardUnits ? "Standard" : "Metric"}
+                />
+              </UnitToggleContainer>
               <Button
                 variant="outline-secondary"
+                size="sm"
+                className="w-100"
                 onClick={() => navigate("/datasets")}
               >
                 Back to Datasets

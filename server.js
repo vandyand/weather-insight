@@ -684,38 +684,49 @@ function processWeatherDataByDatasetType(
       // If we have data for this date, use it
       const day = receivedDataMap[date];
       let value = null;
+      let standardValue = null;
 
       if (day) {
         switch (datasetId) {
           case "temperature":
-            value = day.temp; // Average temperature for the day
+            value = day.temp; // Average temperature for the day in Celsius
+            standardValue = celsiusToFahrenheit(day.temp); // Convert to Fahrenheit
             break;
           case "temperature-high":
-            value = day.tempmax; // Maximum temperature
+            value = day.tempmax; // Maximum temperature in Celsius
+            standardValue = celsiusToFahrenheit(day.tempmax); // Convert to Fahrenheit
             break;
           case "temperature-low":
-            value = day.tempmin; // Minimum temperature
+            value = day.tempmin; // Minimum temperature in Celsius
+            standardValue = celsiusToFahrenheit(day.tempmin); // Convert to Fahrenheit
             break;
           case "temperature-historical":
-            value = day.temp; // Same as temperature for historical data
+            value = day.temp; // Same as temperature for historical data in Celsius
+            standardValue = celsiusToFahrenheit(day.temp); // Convert to Fahrenheit
             break;
           case "feels-like":
-            value = day.feelslike; // Feels like temperature
+            value = day.feelslike; // Feels like temperature in Celsius
+            standardValue = celsiusToFahrenheit(day.feelslike); // Convert to Fahrenheit
             break;
           case "precipitation":
-            value = day.precip; // Precipitation amount
+            value = day.precip; // Precipitation amount in mm
+            standardValue = millimetersToInches(day.precip); // Convert to inches
             break;
           case "humidity":
-            value = day.humidity; // Humidity percentage
+            value = day.humidity; // Humidity percentage (no conversion needed)
+            standardValue = day.humidity; // Same value
             break;
           case "wind-speed":
-            value = day.windspeed; // Wind speed
+            value = day.windspeed; // Wind speed in km/h
+            standardValue = kmhToMph(day.windspeed); // Convert to mph
             break;
           case "uv-index":
-            value = day.uvindex; // UV index
+            value = day.uvindex; // UV index (no conversion needed)
+            standardValue = day.uvindex; // Same value
             break;
           case "cloud-cover":
-            value = day.cloudcover; // Cloud cover percentage
+            value = day.cloudcover; // Cloud cover percentage (no conversion needed)
+            standardValue = day.cloudcover; // Same value
             break;
           default:
             // Default to temperature if dataset is not recognized
@@ -723,6 +734,7 @@ function processWeatherDataByDatasetType(
               `Unknown dataset type: ${datasetId}, defaulting to temperature`
             );
             value = day.temp;
+            standardValue = celsiusToFahrenheit(day.temp);
         }
       } else {
         console.warn(`Missing data for date: ${date}, will interpolate`);
@@ -732,10 +744,11 @@ function processWeatherDataByDatasetType(
 
       return {
         timestamp: date,
-        value,
+        value, // metric value
+        standardValue, // standard (imperial) value
       };
     })
-    .filter((point) => point.value !== null); // Remove points with null values
+    .filter((point) => point.value !== null);
 }
 
 // Helper function to generate mock time series data
@@ -810,4 +823,17 @@ function getBaseValueForDataset(datasetId, lat) {
     default:
       return 50; // Generic base value
   }
+}
+
+// Helper functions for unit conversions
+function celsiusToFahrenheit(celsius) {
+  return (celsius * 9) / 5 + 32;
+}
+
+function millimetersToInches(mm) {
+  return mm * 0.0393701;
+}
+
+function kmhToMph(kmh) {
+  return kmh * 0.621371;
 }
