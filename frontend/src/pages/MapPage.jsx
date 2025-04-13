@@ -622,8 +622,13 @@ const MapPage = () => {
     };
 
     // Get all dataset types present in the data
-    const datasetTypes = Object.keys(timeSeriesData[0]).filter(
+    const allDatasetTypes = Object.keys(timeSeriesData[0]).filter(
       (key) => key !== "timestamp"
+    );
+
+    // Filter out the _standard columns
+    const datasetTypes = allDatasetTypes.filter(
+      (key) => !key.endsWith("_standard")
     );
 
     // Map each dataset type to a series, applying min-max normalization
@@ -806,8 +811,14 @@ const MapPage = () => {
     const { timeSeriesData } = weatherData;
 
     // Get all dataset types present in the data
-    const datasetTypes = Object.keys(timeSeriesData[0]).filter(
+    const allDatasetTypes = Object.keys(timeSeriesData[0]).filter(
       (key) => key !== "timestamp"
+    );
+
+    // Filter out the _standard columns in all cases - we'll use the original column names
+    // and just change the values shown
+    const datasetTypes = allDatasetTypes.filter(
+      (key) => !key.endsWith("_standard")
     );
 
     // Format the date for better readability, ensuring correct date interpretation
