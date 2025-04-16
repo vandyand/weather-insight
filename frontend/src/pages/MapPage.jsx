@@ -128,7 +128,7 @@ const UnitToggleContainer = styled.div`
   margin-bottom: 15px;
   background: #f8f9fa;
   border-radius: 8px;
-  padding: 6px 8px;
+  padding: 8px 12px;
   border: 1px solid #dee2e6;
   justify-content: space-between;
 `;
@@ -137,7 +137,7 @@ const UnitToggleLabel = styled.span`
   font-size: 0.9rem;
   font-weight: 500;
   color: #495057;
-  margin-right: 8px;
+  margin-right: 10px;
 `;
 
 const ToggleSwitch = styled(Form.Check)`
@@ -145,11 +145,17 @@ const ToggleSwitch = styled(Form.Check)`
     height: 1.25rem;
     width: 2.5rem;
     cursor: pointer;
+    margin-right: 8px;
 
     &:checked {
       background-color: #0d6efd;
       border-color: #0d6efd;
     }
+  }
+
+  .form-check-label {
+    margin-left: 10px;
+    padding-left: 0;
   }
 `;
 
@@ -997,13 +1003,15 @@ const MapPage = () => {
                 <UnitToggleLabel>
                   {useStandardUnits ? "°F, mph, in" : "°C, km/h, mm"}
                 </UnitToggleLabel>
-                <ToggleSwitch
-                  type="switch"
-                  id="unit-toggle"
-                  checked={useStandardUnits}
-                  onChange={() => setUseStandardUnits(!useStandardUnits)}
-                  label={useStandardUnits ? "Standard" : "Metric"}
-                />
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <ToggleSwitch
+                    type="switch"
+                    id="unit-toggle"
+                    checked={useStandardUnits}
+                    onChange={() => setUseStandardUnits(!useStandardUnits)}
+                    label={useStandardUnits ? "Standard" : "Metric"}
+                  />
+                </div>
               </UnitToggleContainer>
               <Button
                 variant="outline-secondary"
